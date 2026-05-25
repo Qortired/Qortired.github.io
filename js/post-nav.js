@@ -101,18 +101,43 @@
         : '\u2190 \u8FD4\u56DE<strong>\u6807\u7B7E</strong> ' + tagName);
   }
 
-  /* ---- Home button (right) ---- */
+  /* ---- Home button (right) — solid red, matching pagination ---- */
   var homeHref = isEn ? '/en/' : '/';
-  var homeBtn = makeButton(homeHref,
-    isEn ? 'Home' : '\u4E3B\u9875');
+  var homeBtn = document.createElement('a');
+  homeBtn.href = homeHref;
+  homeBtn.textContent = isEn ? 'Home' : '\u4E3B\u9875';
+  homeBtn.style.cssText = [
+    'display:inline-flex',
+    'align-items:center',
+    'justify-content:center',
+    'min-width:42px',
+    'height:42px',
+    'padding:0 18px',
+    'border-radius:10px',
+    'border:1px solid var(--primary-color,#A31F34)',
+    'background:var(--primary-color,#A31F34)',
+    'color:#fff',
+    'font-size:14px',
+    'font-weight:500',
+    'text-decoration:none',
+    'transition:all 0.2s ease'
+  ].join(';');
+  homeBtn.onmouseenter = function() {
+    this.style.opacity = '0.88';
+    this.style.boxShadow = '0 2px 8px rgba(163,31,52,0.25)';
+  };
+  homeBtn.onmouseout = function() {
+    this.style.opacity = '1';
+    this.style.boxShadow = 'none';
+  };
 
   /* ---- Container: flex layout ---- */
   var wrap = document.createElement('div');
+  wrap.className = 'px-2 sm:px-6 md:px-8';
   wrap.style.cssText = [
     'display:flex',
     'align-items:center',
-    'margin:32px 0 0',
-    'padding:0 4px',
+    'margin:24px 0',
     'gap:12px'
   ].join(';');
 
@@ -130,11 +155,12 @@
   wrap.appendChild(spacer);
   wrap.appendChild(homeBtn);
 
-  /* ---- Append after article content ---- */
-  var container = document.querySelector('.article-content-container') ||
-    document.querySelector('.post-page-container');
-
-  if (container) {
-    container.appendChild(wrap);
+  /* ---- Insert between copyright box and hidden article-nav ---- */
+  var parent = document.querySelector('.article-content-container');
+  var navEl = document.querySelector('.article-nav');
+  if (parent && navEl) {
+    parent.insertBefore(wrap, navEl);
+  } else if (parent) {
+    parent.appendChild(wrap);
   }
 })();

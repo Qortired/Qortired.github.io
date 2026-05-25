@@ -14,11 +14,28 @@
 
   var isEn = /\/en\//.test(location.pathname) || /\.en\/?$/.test(location.pathname);
 
+  /* ---- Smart language switch: stay on same page in other language ---- */
+  function getLangSwitchPath() {
+    var p = location.pathname;
+    if (isEn) {
+      // English → Chinese: remove /en/ prefix and .en suffix
+      return p.replace(/^\/en/, '').replace(/\.en(\/?)$/, '$1');
+    }
+    // Chinese → English
+    if (p === '/') return '/en/';
+    // Category/tag pages → prepend /en
+    if (/^\/(categories|tags)(\/|$)/.test(p)) return '/en' + p;
+    // Article posts → append .en suffix before trailing slash
+    return p.replace(/\/$/, '') + '.en/';
+  }
+
+  var langSwitchHref = getLangSwitchPath();
+
   /* ---- Language Switcher Button ---- */
   var btn = document.querySelector('.lang-switch-btn');
   if (btn) {
     // Update existing button for current language
-    btn.href = isEn ? '/' : '/en/';
+    btn.href = langSwitchHref;
     btn.textContent = isEn ? '中文' : 'EN';
     // Re-apply base styles (in case they were lost)
     btn.style.cssText = [
@@ -52,7 +69,7 @@
     // Create new button
     btn = document.createElement('a');
     btn.className = 'lang-switch-btn';
-    btn.href = isEn ? '/' : '/en/';
+    btn.href = langSwitchHref;
     btn.textContent = isEn ? '中文' : 'EN';
     btn.style.cssText = [
       'position:fixed',
@@ -158,13 +175,48 @@
     }
   }
 
-  // Run after DOM painted, retry for safety
+  // Fix English relative time (theme hardcodes zh-CN ago strings)
+  function fixEnglishRelativeTime() {
+    var dates = document.querySelectorAll('.home-article-meta-info .home-article-date');
+    if (!dates.length) return;
+    var engAgo = {
+      second: '%s second%s ago',
+      minute: '%s minute%s ago',
+      hour:   '%s hour%s ago',
+      day:    '%s day%s ago',
+      week:   '%s week%s ago',
+      month:  '%s month%s ago',
+      year:   '%s year%s ago'
+    };
+    var plural = function(n, s) { return s.replace('%s', n).replace('%s', n > 1 ? 's' : ''); };
+    for (var i = 0; i < dates.length; i++) {
+      var el = dates[i];
+      var raw = el.getAttribute('data-date');
+      if (!raw) continue;
+      var postMs = new Date(raw.split(' GMT')[0]).getTime();
+      var diff = Math.floor((Date.now() - postMs) / 1000);
+      var y = Math.floor(diff / 2592000 / 12),
+          mo = Math.floor(diff / 2592000),
+          w = Math.floor(diff / 86400 / 7),
+          d = Math.floor(diff / 86400),
+          h = Math.floor(diff / 3600 % 24),
+          mi = Math.floor(diff / 60 % 60),
+          s = Math.floor(diff % 60);
+      var val = y>0 ? plural(y, engAgo.year) : mo>0 ? plural(mo, engAgo.month) :
+                w>0 ? plural(w, engAgo.week) : d>0 ? plural(d, engAgo.day) :
+                h>0 ? plural(h, engAgo.hour) : mi>0 ? plural(mi, engAgo.minute) :
+                s>0 ? plural(s, engAgo.second) : '';
+      el.textContent = val;
+    }
+  }
   requestAnimationFrame(function() {
     replaceTitles();
     fixNavLinks();
+    fixEnglishRelativeTime();
     setTimeout(function() {
       replaceTitles();
       fixNavLinks();
+      fixEnglishRelativeTime();
     }, 1000);
   });
 
