@@ -67,15 +67,22 @@
 
   /* Extract category from URL */
   var parts = path.replace(/^\/|\/$/g,'').split('/');
-  var catName = parts[parts[0]==='en'?1:0];
+  var catName = decodeURIComponent(parts[parts[0]==='en'?1:0]);
   if (!catName) return;
-  var catHref = '/categories/' + encodeURIComponent(decodeURIComponent(catName)) + '/';
+  var catHref = '/categories/' + encodeURIComponent(catName) + '/';
   if (isEnB) catHref = '/en' + catHref;
 
   /* Extract tag from DOM */
   var tl = document.querySelector('.article-tags a');
   var tagHref = tl ? tl.getAttribute('href') : null;
-  var tagName = tl ? decodeURIComponent(tagHref.replace(/^\/|\/$/g,'').split('/').pop()) : null;
+  var tagName = null;
+  if (tagHref) {
+    var tagSeg = tagHref.replace(/^\/|\/$/g,'').split('/');
+    // last non-empty segment is the tag name
+    for (var i = tagSeg.length - 1; i >= 0; i--) {
+      if (tagSeg[i]) { tagName = decodeURIComponent(tagSeg[i]); break; }
+    }
+  }
 
   /* Button factory */
   function mk(href, html) {
