@@ -12,7 +12,7 @@
 (function() {
   'use strict';
 
-  var isEn = /^\/en\//.test(location.pathname);
+  var isEn = /\/en\//.test(location.pathname) || /\.en\/?$/.test(location.pathname);
 
   /* ---- Language Switcher Button ---- */
   var btn = document.querySelector('.lang-switch-btn');
