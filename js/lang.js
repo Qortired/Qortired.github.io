@@ -86,6 +86,15 @@
         desc.childNodes[i].textContent = desc.childNodes[i].textContent.replace(/Qord\u7684Blog/g, 'Qord Blog');
   }
 
+  function replacePageTitle() {
+    var t = document.title;
+    t = t.replace(/Qord\u7684Blog/g, 'Qord Blog');
+    t = t.replace(/\u8BB0\u5F55\u6E38\u620F\u5165\u5751\u7B14\u8BB0/g, 'Games Notes');
+    t = t.replace(/\u5206\u7C7B/g, 'Categories');
+    t = t.replace(/\u6807\u7B7E/g, 'Tags');
+    document.title = t;
+  }
+
   function fixNavLinks() {
     var ls = document.querySelectorAll('a[href^="/"]:not([href^="/en/"]):not(.lang-switch-btn)');
     var pat = /^\/(categories|tags|archives)\//;
@@ -110,8 +119,8 @@
   }
 
   requestAnimationFrame(function(){
-    replaceTitles();fixNavLinks();fixEnglishRelativeTime();
-    setTimeout(function(){replaceTitles();fixNavLinks();fixEnglishRelativeTime()},1000);
+    replacePageTitle();replaceTitles();fixNavLinks();fixEnglishRelativeTime();
+    setTimeout(function(){replacePageTitle();replaceTitles();fixNavLinks();fixEnglishRelativeTime()},1000);
   });
 
   var initSub = function(){
