@@ -20,8 +20,10 @@
     var s = document.createElement('style');
     s.id = 'lang-switch-styles';
     s.textContent = [
-      '.navbar-shrink .lang-switch-btn { top:10px!important;padding:4px 12px!important;font-size:12px!important;border-radius:16px!important }',
-      '@media(max-width:768px){.lang-switch-btn{top:18px!important;right:58px!important;padding:4px 10px!important;font-size:11px!important;letter-spacing:0!important;border-radius:14px!important}}',
+      '#lang-gear-wrap{position:fixed;top:20px;right:20px;z-index:9999;display:flex;align-items:center;gap:8px}',
+      '.navbar-shrink #lang-gear-wrap{top:10px!important}',
+      '.navbar-shrink .lang-switch-btn,.navbar-shrink #settings-gear-btn{padding:4px 12px!important;font-size:12px!important;border-radius:16px!important}',
+      '@media(max-width:768px){#lang-gear-wrap{top:18px!important;right:58px!important}}',
       '.cat-count-hidden{display:none!important}'
     ].join('\n');
     document.head.appendChild(s);
@@ -36,17 +38,43 @@
     return p.replace(/\/$/, '') + '.en/';
   }
 
+  /* ---- Wrapper for gear + lang buttons ---- */
+  var wrap = document.getElementById('lang-gear-wrap');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.id = 'lang-gear-wrap';
+    document.body.appendChild(wrap);
+  }
+
+  /* ---- Settings gear button ---- */
+  if (!document.getElementById('settings-gear-btn')) {
+    var gearBtn = document.createElement('button');
+    gearBtn.id = 'settings-gear-btn';
+    gearBtn.innerHTML = '<i class="fa-regular fa-cog"></i>';
+    gearBtn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:20px;background:transparent;border:1px solid var(--second-text-color,#666);color:var(--second-text-color,#666);cursor:pointer;font-size:13px;backdrop-filter:blur(4px);transition:all .2s ease';
+    gearBtn.onmouseenter = function(){this.style.color='#fff';this.style.background='var(--primary-color,#A31F34)';this.style.borderColor='var(--primary-color,#A31F34)'};
+    gearBtn.onmouseout = function(){this.style.color='var(--second-text-color,#666)';this.style.background='transparent';this.style.borderColor='var(--second-text-color,#666)'};
+    gearBtn.onclick = function(e) {
+      var list = document.querySelector('.side-tools-container .hidden-tools-list');
+      if (list) list.classList.toggle('show');
+      e.stopPropagation();
+    };
+    wrap.appendChild(gearBtn);
+  }
+
+  /* ---- Lang switch button ---- */
   var btn = document.querySelector('.lang-switch-btn');
   if (!btn) {
     btn = document.createElement('a');
     btn.className = 'lang-switch-btn';
-    document.body.appendChild(btn);
   }
   btn.href = getLangSwitchPath();
   btn.textContent = isEn ? '中文' : 'EN';
-  btn.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;padding:6px 14px;border-radius:20px;background:transparent;border:1px solid var(--second-text-color,#666);color:var(--second-text-color,#666);text-decoration:none;font-size:13px;font-weight:500;letter-spacing:.5px;backdrop-filter:blur(4px);transition:all .2s ease';
+  btn.style.cssText = 'padding:6px 14px;border-radius:20px;background:transparent;border:1px solid var(--second-text-color,#666);color:var(--second-text-color,#666);text-decoration:none;font-size:13px;font-weight:500;letter-spacing:.5px;backdrop-filter:blur(4px);transition:all .2s ease';
   btn.onmouseenter = function(){this.style.color='#fff';this.style.background='var(--primary-color,#A31F34)';this.style.borderColor='var(--primary-color,#A31F34)'};
   btn.onmouseout = function(){this.style.color='var(--second-text-color,#666)';this.style.background='transparent';this.style.borderColor='var(--second-text-color,#666)'};
+  /* EN button goes LEFT of gear: prepend before gear */
+  if (!wrap.contains(btn)) wrap.insertBefore(btn, wrap.firstChild);
 
   /* ---- Beijing Time Clock (footer) ---- */
   var clk = document.createElement('div');

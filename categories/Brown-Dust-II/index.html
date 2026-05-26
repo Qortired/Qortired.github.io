@@ -132,6 +132,17 @@
                     <style>
   .home-sidebar-container { display: none !important; }
   .home-content-container { margin-right: 0 !important; }
+  .statistics { display: none !important; }
+  .side-tools-container .toggle-tools-list { display: none !important; }
+  .side-tools-container .visible-tools-list { display: none !important; }
+  .right-side-tools-container { bottom: auto !important; top: 68px !important; right: 20px !important; opacity: 1 !important; pointer-events: all !important; }
+  .right-side-tools-container.hide { opacity: 1 !important; pointer-events: all !important; }
+  .navbar-shrink .right-side-tools-container { top: 52px !important; }
+  .side-tools-container .hidden-tools-list { transform: translateY(-10px) !important; }
+  .side-tools-container .hidden-tools-list.show { transform: translateY(0) !important; }
+  @media (max-width: 768px) { .right-side-tools-container { display: none !important; } }
+  @media (min-width: 769px) { .navbar-content { padding-right: 120px !important; } }
+  .navbar-shrink .navbar-content { padding-right: 100px !important; }
 </style>
 
                 
