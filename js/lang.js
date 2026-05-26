@@ -14,6 +14,7 @@
 
   var path = location.pathname;
   var isEn = /\/en\//.test(path) || /\.en\/?$/.test(path);
+  var EN_SUBTITLE = 'Games Notes'; /* 英文副标题：改这一处，Banner 和页脚同步更新 */
 
   /* ---- Inject shared styles ---- */
   if (!document.getElementById('lang-switch-styles')) {
@@ -21,6 +22,7 @@
     s.id = 'lang-switch-styles';
     s.textContent = [
       '#lang-gear-wrap{position:fixed;top:20px;right:20px;z-index:9999;display:flex;align-items:center;gap:8px}',
+      '.lang-switch-btn,#settings-gear-btn{line-height:1!important;box-sizing:border-box!important}',
       '.navbar-shrink #lang-gear-wrap{top:10px!important}',
       '.navbar-shrink .lang-switch-btn,.navbar-shrink #settings-gear-btn{padding:4px 12px!important;font-size:12px!important;border-radius:16px!important}',
       '@media(max-width:768px){#lang-gear-wrap{top:18px!important;right:58px!important}}',
@@ -51,7 +53,7 @@
     var gearBtn = document.createElement('button');
     gearBtn.id = 'settings-gear-btn';
     gearBtn.innerHTML = '<i class="fa-regular fa-cog"></i>';
-    gearBtn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:20px;background:transparent;border:1px solid var(--second-text-color,#666);color:var(--second-text-color,#666);cursor:pointer;font-size:13px;backdrop-filter:blur(4px);transition:all .2s ease';
+    gearBtn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;padding:6px 14px;border-radius:20px;background:transparent;border:1px solid var(--second-text-color,#666);color:var(--second-text-color,#666);cursor:pointer;font-size:13px;backdrop-filter:blur(4px);transition:all .2s ease';
     gearBtn.onmouseenter = function(){this.style.color='#fff';this.style.background='var(--primary-color,#A31F34)';this.style.borderColor='var(--primary-color,#A31F34)'};
     gearBtn.onmouseout = function(){this.style.color='var(--second-text-color,#666)';this.style.background='transparent';this.style.borderColor='var(--second-text-color,#666)'};
     gearBtn.onclick = function(e) {
@@ -69,12 +71,27 @@
     btn.className = 'lang-switch-btn';
   }
   btn.href = getLangSwitchPath();
-  btn.textContent = isEn ? '中文' : 'EN';
+  btn.textContent = isEn ? 'CN' : 'EN';
   btn.style.cssText = 'padding:6px 14px;border-radius:20px;background:transparent;border:1px solid var(--second-text-color,#666);color:var(--second-text-color,#666);text-decoration:none;font-size:13px;font-weight:500;letter-spacing:.5px;backdrop-filter:blur(4px);transition:all .2s ease';
   btn.onmouseenter = function(){this.style.color='#fff';this.style.background='var(--primary-color,#A31F34)';this.style.borderColor='var(--primary-color,#A31F34)'};
   btn.onmouseout = function(){this.style.color='var(--second-text-color,#666)';this.style.background='transparent';this.style.borderColor='var(--second-text-color,#666)'};
+  /* Save manual language preference when user clicks the button */
+  btn.onclick = function(){ localStorage.setItem('qord-lang-pref', isEn ? 'zh' : 'en'); };
   /* EN button goes LEFT of gear: prepend before gear */
   if (!wrap.contains(btn)) wrap.insertBefore(btn, wrap.firstChild);
+
+  /* ---- Footer subtitle (replaces post-count stats) ---- */
+  function replaceFooterStats() {
+    var el = document.querySelector('.post-count');
+    if (!el) return;
+    el.textContent = isEn ? EN_SUBTITLE : (window._blogSubtitleZh || '');
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', replaceFooterStats);
+  } else {
+    replaceFooterStats();
+  }
+  setTimeout(replaceFooterStats, 200);
 
   /* ---- Beijing Time Clock (footer) ---- */
   var clk = document.createElement('div');
@@ -155,7 +172,7 @@
     var sub = document.getElementById('subtitle');
     if (!sub) return;
     sub.textContent = '';
-    new window.Typed('#subtitle',{strings:['Games Notes'],typeSpeed:100,backSpeed:80,backDelay:1500,loop:false,startDelay:500,smartBackspace:false,showCursor:true});
+    new window.Typed('#subtitle',{strings:[EN_SUBTITLE],typeSpeed:100,backSpeed:80,backDelay:1500,loop:false,startDelay:500,smartBackspace:false,showCursor:true});
   };
   var chk = setInterval(function(){if(window.Typed){clearInterval(chk);initSub()}},100);
   setTimeout(function(){clearInterval(chk)},10000);
