@@ -1,3 +1,5 @@
+https://qortired.github.io/TEST/silver-workshop-startup-analysis.en/
+https://qortired.github.io/TEST/silver-workshop-startup-analysis/
 https://qortired.github.io/TEST/community-silver-workshop-analysis.en/
 https://qortired.github.io/TEST/community-silver-workshop-analysis/
 https://qortired.github.io/CPA%E5%85%A5%E5%9D%91%E8%AF%A6%E6%83%85%EF%BC%88CPA-Guide%EF%BC%89/cpa-placeholder.en/
@@ -10,8 +12,8 @@ https://qortired.github.io/Stardew-Valley/stardew-valley-placeholder/
 https://qortired.github.io/Brown-Dust-II/brown-dust-ii-placeholder/
 https://qortired.github.io/TEST/hello-world/
 https://qortired.github.io/CPA%E5%85%A5%E5%9D%91%E8%AF%A6%E6%83%85%EF%BC%88CPA-Guide%EF%BC%89/cpa-placeholder/
-https://qortired.github.io/en/categories/index.html
 https://qortired.github.io/en/tags/index.html
+https://qortired.github.io/en/categories/index.html
 https://qortired.github.io/tags/index.html
 https://qortired.github.io/categories/index.html
 https://qortired.github.io/
