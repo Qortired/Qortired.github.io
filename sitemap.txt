@@ -1,4 +1,4 @@
-https://qortired.github.io/TEST/data-analysis-base-period-and-current-period-simple-calculation-method/
+https://qortired.github.io/TEST/data-analysis-base-period-and-current-period-simplified-calculation-method/
 https://qortired.github.io/TEST/markdown-test/
 https://qortired.github.io/TEST/hello-world.en/
 https://qortired.github.io/TEST/hello-world/
