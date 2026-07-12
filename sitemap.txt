@@ -1,13 +1,11 @@
-https://qortired.github.io/CS-Study/data-analysis-study-review-260712.en/
-https://qortired.github.io/CS-Study/data-analysis-study-review-260712/
-https://qortired.github.io/CS-Study/skill-data-analysis.en/
-https://qortired.github.io/CS-Study/skill-data-analysis/
+https://qortired.github.io/CS-Study/data-analysis-study-review-2607121945/
+https://qortired.github.io/CS-Study/skill-data-analysis1/
 https://qortired.github.io/TEST/hello-world.en/
 https://qortired.github.io/TEST/hello-world/
 https://qortired.github.io/CS-Study/cs-exam-preparation-preface.en/
 https://qortired.github.io/CS-Study/cs-exam-preparation-preface/
-https://qortired.github.io/en/tags/index.html
 https://qortired.github.io/en/categories/index.html
+https://qortired.github.io/en/tags/index.html
 https://qortired.github.io/tags/index.html
 https://qortired.github.io/categories/index.html
 https://qortired.github.io/
