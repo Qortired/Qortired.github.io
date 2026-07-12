@@ -2,6 +2,15 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
+    <loc>https://qortired.github.io/CS-Study/ada/</loc>
+    
+    <lastmod>2026-07-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
     <loc>https://qortired.github.io/CS-Study/cs-exam-preparation-preface1/</loc>
     
     <lastmod>2026-07-12</lastmod>
@@ -47,7 +56,7 @@
   </url>
   
   <url>
-    <loc>https://qortired.github.io/en/categories/index.html</loc>
+    <loc>https://qortired.github.io/en/tags/index.html</loc>
     
     <lastmod>2026-05-25</lastmod>
     
@@ -56,7 +65,7 @@
   </url>
   
   <url>
-    <loc>https://qortired.github.io/en/tags/index.html</loc>
+    <loc>https://qortired.github.io/en/categories/index.html</loc>
     
     <lastmod>2026-05-25</lastmod>
     
