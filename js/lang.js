@@ -40,6 +40,35 @@
     return p.replace(/\/$/, '') + '.en/';
   }
 
+  /*
+   * Some posts intentionally have no translated counterpart. Do not point
+   * the switch button at a guessed 404 URL: keep it on the current page until
+   * the target has been confirmed to exist.
+   */
+  var langTarget = getLangSwitchPath();
+  var langTargetAvailable = null;
+
+  function checkPageExists(target) {
+    return fetch(target, { method: 'HEAD', cache: 'no-store' })
+      .then(function(response) {
+        if (response.ok) return true;
+        if (response.status === 405) {
+          return fetch(target, { method: 'GET', cache: 'no-store' })
+            .then(function(fallback) { return fallback.ok; });
+        }
+        return false;
+      })
+      .catch(function() { return false; });
+  }
+
+  function resolveLangTarget(button) {
+    checkPageExists(langTarget).then(function(exists) {
+      langTargetAvailable = exists;
+      if (exists) button.href = langTarget;
+      else button.href = path;
+    });
+  }
+
   /* ---- Wrapper for gear + lang buttons ---- */
   var wrap = document.getElementById('lang-gear-wrap');
   if (!wrap) {
@@ -70,15 +99,30 @@
     btn = document.createElement('a');
     btn.className = 'lang-switch-btn';
   }
-  btn.href = getLangSwitchPath();
+  /* Stay on the current page unless the counterpart is confirmed. */
+  btn.href = path;
   btn.textContent = isEn ? 'CN' : 'EN';
   btn.style.cssText = 'padding:6px 14px;border-radius:20px;background:transparent;border:1px solid var(--second-text-color,#666);color:var(--second-text-color,#666);text-decoration:none;font-size:13px;font-weight:500;letter-spacing:.5px;backdrop-filter:blur(4px);transition:all .2s ease';
   btn.onmouseenter = function(){this.style.color='#fff';this.style.background='var(--primary-color,#A31F34)';this.style.borderColor='var(--primary-color,#A31F34)'};
   btn.onmouseout = function(){this.style.color='var(--second-text-color,#666)';this.style.background='transparent';this.style.borderColor='var(--second-text-color,#666)'};
   /* Save manual language preference when user clicks the button */
-  btn.onclick = function(){ localStorage.setItem('qord-lang-pref', isEn ? 'zh' : 'en'); };
+  btn.onclick = function(e){
+    localStorage.setItem('qord-lang-pref', isEn ? 'zh' : 'en');
+
+    if (langTargetAvailable === true) return;
+
+    /* Prevent navigation while the existence check is pending or failed. */
+    e.preventDefault();
+    if (langTargetAvailable === false) return;
+
+    checkPageExists(langTarget).then(function(exists) {
+      langTargetAvailable = exists;
+      if (exists) window.location.href = langTarget;
+    });
+  };
   /* EN button goes LEFT of gear: prepend before gear */
   if (!wrap.contains(btn)) wrap.insertBefore(btn, wrap.firstChild);
+  resolveLangTarget(btn);
 
   /* ---- Footer subtitle (replaces post-count stats) ---- */
   function replaceFooterStats() {
