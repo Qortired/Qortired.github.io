@@ -2,36 +2,9 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
-    <loc>https://qortired.github.io/TEST/data-analysis-base-period-and-current-period-simple-calculation-method1/</loc>
-    
-    <lastmod>2026-07-12</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://qortired.github.io/TEST/data-analysis-calculation-simplification-memory-cards-for-most-addition-and-subtraction-methods/</loc>
-    
-    <lastmod>2026-07-12</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://qortired.github.io/TEST/markdown-test/</loc>
-    
-    <lastmod>2026-07-12</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
     <loc>https://qortired.github.io/TEST/hello-world.en/</loc>
     
-    <lastmod>2026-05-25</lastmod>
+    <lastmod>2026-07-12</lastmod>
     
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -39,6 +12,33 @@
   
   <url>
     <loc>https://qortired.github.io/TEST/hello-world/</loc>
+    
+    <lastmod>2026-07-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://qortired.github.io/CS-Study/cs-exam-preparation-preface.en/</loc>
+    
+    <lastmod>2026-07-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://qortired.github.io/CS-Study/cs-exam-preparation-preface/</loc>
+    
+    <lastmod>2026-07-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://qortired.github.io/en/tags/index.html</loc>
     
     <lastmod>2026-05-25</lastmod>
     
@@ -48,15 +48,6 @@
   
   <url>
     <loc>https://qortired.github.io/en/categories/index.html</loc>
-    
-    <lastmod>2026-05-25</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://qortired.github.io/en/tags/index.html</loc>
     
     <lastmod>2026-05-25</lastmod>
     
