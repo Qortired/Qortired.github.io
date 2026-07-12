@@ -2,8 +2,8 @@ https://qortired.github.io/TEST/zljqyxq/
 https://qortired.github.io/TEST/markdown-test/
 https://qortired.github.io/TEST/hello-world.en/
 https://qortired.github.io/TEST/hello-world/
-https://qortired.github.io/en/tags/index.html
 https://qortired.github.io/en/categories/index.html
+https://qortired.github.io/en/tags/index.html
 https://qortired.github.io/tags/index.html
 https://qortired.github.io/categories/index.html
 https://qortired.github.io/
