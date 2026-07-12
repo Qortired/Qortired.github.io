@@ -2,6 +2,15 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
+    <loc>https://qortired.github.io/CS-Study/cs-exam-preparation-preface1/</loc>
+    
+    <lastmod>2026-07-12</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
     <loc>https://qortired.github.io/CS-Study/data-analysis-study-review-2607121945/</loc>
     
     <lastmod>2026-07-12</lastmod>
@@ -30,24 +39,6 @@
   
   <url>
     <loc>https://qortired.github.io/TEST/hello-world/</loc>
-    
-    <lastmod>2026-07-12</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://qortired.github.io/CS-Study/cs-exam-preparation-preface.en/</loc>
-    
-    <lastmod>2026-07-12</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://qortired.github.io/CS-Study/cs-exam-preparation-preface/</loc>
     
     <lastmod>2026-07-12</lastmod>
     
