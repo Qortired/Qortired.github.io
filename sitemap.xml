@@ -2,6 +2,15 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
+    <loc>https://qortired.github.io/CS-Study/%E8%B5%84%E6%96%99%E5%88%86%E6%9E%90/%E8%AE%A1%E7%AE%97%E7%AE%80%E5%8C%96/data-analysis-simplified-calculation-quick-calculation-of-average-annual-growth-rate/</loc>
+    
+    <lastmod>2026-07-17</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
     <loc>https://qortired.github.io/CS-Study/%E8%B5%84%E6%96%99%E5%88%86%E6%9E%90/%E8%AE%A1%E7%AE%97%E7%AE%80%E5%8C%96/data-analysis-simplified-calculation-quick-estimation-of-indirect-growth-rate1/</loc>
     
     <lastmod>2026-07-17</lastmod>
@@ -200,7 +209,7 @@
   </url>
   
   <url>
-    <loc>https://qortired.github.io/en/categories/index.html</loc>
+    <loc>https://qortired.github.io/en/tags/index.html</loc>
     
     <lastmod>2026-05-25</lastmod>
     
@@ -209,7 +218,7 @@
   </url>
   
   <url>
-    <loc>https://qortired.github.io/en/tags/index.html</loc>
+    <loc>https://qortired.github.io/en/categories/index.html</loc>
     
     <lastmod>2026-05-25</lastmod>
     
