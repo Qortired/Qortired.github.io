@@ -1,3 +1,4 @@
+https://qortired.github.io/CS-Study/%E8%B5%84%E6%96%99%E5%88%86%E6%9E%90/%E8%AE%A1%E7%AE%97%E7%AE%80%E5%8C%96/data-analysis-simplified-calculation-quick-estimation-of-indirect-growth-rate1/
 https://qortired.github.io/CS-Study/%E8%B5%84%E6%96%99%E5%88%86%E6%9E%90/%E8%AE%A1%E7%AE%97%E7%AE%80%E5%8C%96/data-analysis-simplified-calculation-quick-estimation-of-indirect-growth-rate/
 https://qortired.github.io/CS-Study/small-organizing-260716/
 https://qortired.github.io/CS-Study/%E8%B5%84%E6%96%99%E5%88%86%E6%9E%90/%E8%AE%A1%E7%AE%97%E7%AE%80%E5%8C%96/data-analysis-calculation-simplification-comparison-of-growth-using-base-period-average-and-two-period-average-calculation/
@@ -8,7 +9,6 @@ https://qortired.github.io/CS-Study/%E8%B5%84%E6%96%99%E5%88%86%E6%9E%90/%E8%AE%
 https://qortired.github.io/CS-Study/percentage-memory/
 https://qortired.github.io/CS-Study/%E8%B5%84%E6%96%99%E5%88%86%E6%9E%90/%E8%AE%A1%E7%AE%97%E7%AE%80%E5%8C%96/data-analysis-calculation-simplification-two-period-weighting-method-memory-card/
 https://qortired.github.io/CS-Study/%E8%B5%84%E6%96%99%E5%88%86%E6%9E%90/%E8%AE%A1%E7%AE%97%E7%AE%80%E5%8C%96/percentage-memory1/
-https://qortired.github.io/CS-Study/skill-data-analysis1/
 https://qortired.github.io/CS-Study/a-b-x-1-b-1-a-personal-insights/
 https://qortired.github.io/CS-Study/class-notes-260714/
 https://qortired.github.io/CS-Study/mid-class-notes-607130933/
