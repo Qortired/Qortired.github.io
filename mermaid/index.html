@@ -393,6 +393,16 @@
     html.mobile-reading-mode .diagram-output svg {
       transform-origin: top left;
     }
+    html.mobile-reading-mode .diagram-output svg foreignObject {
+      overflow: visible !important;
+    }
+    html.mobile-reading-mode .diagram-output svg .nodeLabel,
+    html.mobile-reading-mode .diagram-output svg .nodeLabel p {
+      white-space: normal !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+      line-height: 1.35 !important;
+    }
   </style>
 </head>
 <body>
@@ -525,6 +535,7 @@
         startOnLoad: false,
         securityLevel: 'loose',
         theme: 'base',
+        htmlLabels: true,
         flowchart: {
           useMaxWidth: false,
           htmlLabels: true,
