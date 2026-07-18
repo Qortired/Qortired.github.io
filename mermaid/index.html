@@ -669,7 +669,12 @@
 
       diagramScroll.addEventListener('pointerdown', event => {
         if (!isMobileReadingMode() || event.pointerType === 'mouse') return;
-        mobilePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        mobilePointers.set(event.pointerId, {
+          x: event.clientX,
+          y: event.clientY,
+          lastX: event.clientX,
+          lastY: event.clientY
+        });
         diagramScroll.setPointerCapture?.(event.pointerId);
         if (mobilePointers.size === 2) {
           const [first, second] = [...mobilePointers.values()];
@@ -679,7 +684,9 @@
       });
       diagramScroll.addEventListener('pointermove', event => {
         if (!isMobileReadingMode() || event.pointerType === 'mouse' || !mobilePointers.has(event.pointerId)) return;
-        mobilePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        const point = mobilePointers.get(event.pointerId);
+        point.x = event.clientX;
+        point.y = event.clientY;
 
         if (mobilePointers.size >= 2) {
           const [first, second] = [...mobilePointers.values()];
@@ -696,13 +703,6 @@
           return;
         }
 
-        const point = mobilePointers.get(event.pointerId);
-        if (!point) return;
-        if (!point.lastX) {
-          point.lastX = point.x;
-          point.lastY = point.y;
-          return;
-        }
         const dx = point.x - point.lastX;
         const dy = point.y - point.lastY;
         point.lastX = point.x;
@@ -876,7 +876,7 @@
           return;
         }
         codeInput.value = code;
-        setZoom(1);
+        setZoom(1, null, null, false);
         renderDiagram(code);
       }
 
