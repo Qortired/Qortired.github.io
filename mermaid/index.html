@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mermaid 图形推理查看器</title>
   <script src="vendor/mermaid.min.js"></script>
+  <script>
+    (() => {
+      const mobileQuery = window.matchMedia('(max-width: 760px) and (pointer: coarse)');
+      const syncMobileMode = () => {
+        document.documentElement.classList.toggle(
+          'mobile-reading-mode',
+          mobileQuery.matches && !window.electronAPI
+        );
+      };
+      syncMobileMode();
+      mobileQuery.addEventListener?.('change', syncMobileMode);
+    })();
+  </script>
   <style>
     :root {
       color-scheme: light;
@@ -323,6 +336,91 @@
       body.has-file .workspace { height: calc(100vh - 72px); min-height: 480px; }
       .diagram-scroll { padding: 16px; }
     }
+
+    html.mobile-reading-mode,
+    html.mobile-reading-mode body {
+      height: 100%;
+      min-height: 100%;
+      overflow: hidden;
+    }
+    html.mobile-reading-mode .app {
+      height: 100dvh;
+      min-height: 100dvh;
+    }
+    html.mobile-reading-mode .topbar,
+    html.mobile-reading-mode .dropzone,
+    html.mobile-reading-mode .file-name,
+    html.mobile-reading-mode #editorPanel,
+    html.mobile-reading-mode .file-change-notice {
+      display: none !important;
+    }
+    html.mobile-reading-mode .content,
+    html.mobile-reading-mode body.has-file .content {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      margin: 0;
+      gap: 0;
+    }
+    html.mobile-reading-mode .workspace,
+    html.mobile-reading-mode body.has-file .workspace {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+    }
+    html.mobile-reading-mode .diagram-panel {
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    html.mobile-reading-mode .panel-head {
+      position: absolute;
+      z-index: 4;
+      top: max(8px, env(safe-area-inset-top));
+      right: max(8px, env(safe-area-inset-right));
+      padding: 5px;
+      border: 1px solid rgba(220, 225, 239, .9);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .84);
+      box-shadow: 0 5px 16px rgba(45, 51, 88, .12);
+      backdrop-filter: blur(10px);
+    }
+    html.mobile-reading-mode .panel-head > strong {
+      display: none;
+    }
+    html.mobile-reading-mode .diagram-tools {
+      gap: 2px;
+    }
+    html.mobile-reading-mode .diagram-tools button {
+      min-width: 30px;
+      padding: 4px 7px;
+      border: 0;
+      background: transparent;
+    }
+    html.mobile-reading-mode .diagram-tools button:hover {
+      background: var(--accent-soft);
+    }
+    html.mobile-reading-mode .zoom-label {
+      min-width: 42px;
+      font-size: 12px;
+    }
+    html.mobile-reading-mode .diagram-scroll {
+      height: 100%;
+      padding: max(16px, env(safe-area-inset-top))
+        max(16px, env(safe-area-inset-right))
+        max(16px, env(safe-area-inset-bottom))
+        max(16px, env(safe-area-inset-left));
+      overscroll-behavior: none;
+      touch-action: none;
+    }
+    html.mobile-reading-mode .position-indicator {
+      top: calc(48px + env(safe-area-inset-top));
+      right: max(8px, env(safe-area-inset-right));
+      bottom: max(12px, env(safe-area-inset-bottom));
+    }
+    html.mobile-reading-mode .diagram-output svg {
+      transform-origin: top left;
+    }
   </style>
 </head>
 <body>
@@ -438,6 +536,13 @@
       let isProgressDragging = false;
       let progressDragOffset = 0;
       let isReloadingExternalFile = false;
+      let mobileAutoFit = true;
+      const mobilePointers = new Map();
+      let pinchStartDistance = 0;
+      let pinchStartZoom = 1;
+
+      const mobileReadingQuery = window.matchMedia('(max-width: 760px) and (pointer: coarse)');
+      const isMobileReadingMode = () => mobileReadingQuery.matches && !window.electronAPI;
 
       if (!window.mermaid) {
         showError('Mermaid 加载失败。请检查网络连接后重新打开此 HTML 文件。');
@@ -561,6 +666,65 @@
         setZoom(nextZoom, focusX, focusY);
       }, { passive: false });
       diagramScroll.addEventListener('scroll', updatePositionIndicator, { passive: true });
+
+      diagramScroll.addEventListener('pointerdown', event => {
+        if (!isMobileReadingMode() || event.pointerType === 'mouse') return;
+        mobilePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        diagramScroll.setPointerCapture?.(event.pointerId);
+        if (mobilePointers.size === 2) {
+          const [first, second] = [...mobilePointers.values()];
+          pinchStartDistance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
+          pinchStartZoom = zoom;
+        }
+      });
+      diagramScroll.addEventListener('pointermove', event => {
+        if (!isMobileReadingMode() || event.pointerType === 'mouse' || !mobilePointers.has(event.pointerId)) return;
+        mobilePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+        if (mobilePointers.size >= 2) {
+          const [first, second] = [...mobilePointers.values()];
+          const distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
+          const rect = diagramScroll.getBoundingClientRect();
+          const centerX = (first.x + second.x) / 2 - rect.left;
+          const centerY = (first.y + second.y) / 2 - rect.top;
+          const nextZoom = Math.max(.25, Math.min(4, pinchStartZoom * distance / pinchStartDistance));
+          if (Math.abs(nextZoom - zoom) > .005) {
+            event.preventDefault();
+            mobileAutoFit = false;
+            setZoom(nextZoom, centerX, centerY);
+          }
+          return;
+        }
+
+        const point = mobilePointers.get(event.pointerId);
+        if (!point) return;
+        if (!point.lastX) {
+          point.lastX = point.x;
+          point.lastY = point.y;
+          return;
+        }
+        const dx = point.x - point.lastX;
+        const dy = point.y - point.lastY;
+        point.lastX = point.x;
+        point.lastY = point.y;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        event.preventDefault();
+        diagramScroll.scrollLeft -= dx;
+        diagramScroll.scrollTop -= dy;
+        updatePositionIndicator();
+      }, { passive: false });
+      const clearMobilePointer = event => {
+        if (!mobilePointers.has(event.pointerId)) return;
+        mobilePointers.delete(event.pointerId);
+        if (mobilePointers.size < 2) pinchStartDistance = 0;
+        if (mobilePointers.size === 1) {
+          const point = [...mobilePointers.values()][0];
+          point.lastX = point.x;
+          point.lastY = point.y;
+        }
+      };
+      diagramScroll.addEventListener('pointerup', clearMobilePointer);
+      diagramScroll.addEventListener('pointercancel', clearMobilePointer);
 
       diagramOutput.addEventListener('click', async event => {
         const target = event.target;
@@ -697,6 +861,7 @@
         sourceFilePath = source.filePath || '';
         sourceDirectoryUrl = source.directoryUrl || '';
         isDirty = false;
+        mobileAutoFit = true;
         fileChangeNotice.hidden = true;
         watchSourceFile();
         fileName.textContent = currentFileName;
@@ -940,7 +1105,11 @@
           const svg = diagramOutput.querySelector('svg');
           if (!svg) throw new Error('Mermaid 没有生成 SVG。');
           baseSvgWidth = getSvgWidth(svg);
-          applyZoom();
+          if (isMobileReadingMode() && mobileAutoFit) {
+            setZoom(getMobileFitZoom(), null, null, false);
+          } else {
+            applyZoom();
+          }
           centerDiagram();
           updatePositionIndicator();
         } catch (error) {
@@ -956,7 +1125,8 @@
         return parts.length === 4 && Number.isFinite(parts[2]) ? parts[2] : 900;
       }
 
-      function setZoom(nextZoom, focusX = null, focusY = null) {
+      function setZoom(nextZoom, focusX = null, focusY = null, userInitiated = true) {
+        if (userInitiated && isMobileReadingMode()) mobileAutoFit = false;
         const previousZoom = zoom;
         const previousScrollLeft = diagramScroll.scrollLeft;
         const previousScrollTop = diagramScroll.scrollTop;
@@ -982,6 +1152,14 @@
         if (!svg || !baseSvgWidth) return;
         svg.style.setProperty('width', `${baseSvgWidth * zoom}px`, 'important');
         svg.style.setProperty('max-width', 'none', 'important');
+      }
+
+      function getMobileFitZoom() {
+        if (!baseSvgWidth) return 1;
+        const styles = getComputedStyle(diagramScroll);
+        const horizontalPadding = (parseFloat(styles.paddingLeft) || 0) + (parseFloat(styles.paddingRight) || 0);
+        const availableWidth = Math.max(1, diagramScroll.clientWidth - horizontalPadding);
+        return Math.max(.25, Math.min(1, availableWidth / baseSvgWidth));
       }
 
       function centerDiagram() {
