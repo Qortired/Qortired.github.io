@@ -8,7 +8,7 @@ graph TD
 
         E --> F["上下看"]
         E --> G["左右看"]
-        E --> H["按O形或米字形看（<a href='../images/figure-reasoning-paths.png'>图示</a>）"]
+        E --> H["按O形或米字形看（<a href='images/figure-reasoning-paths.png'>图示</a>）"]
 
         D --> J["看样式的数量"]
         F --> J

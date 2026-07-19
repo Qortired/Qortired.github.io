@@ -7,14 +7,14 @@ graph TD
         AE -->|直线（上下左右斜对角）| AF["考虑平移距离（步数）"]
         AE -->|绕圈（顺/逆时针）| AF
 
-        AG -->|循环走| MOVE_END["占位"]
-        AG -->|反弹走| MOVE_END
+        AG -->|循环走| AQ
+        AG -->|反弹走| AQ
         AG -->|最后考虑| AI["如果仍未发现规律，检查后续图形是否偏离前两图确定的路径，考虑是否是特殊路径，即换方向（<a href='../images/special-path-change-direction.png'>图示</a>）"]
         AF -->|递增（等差）| AG["考虑移动路径（<a href='../images/movement-path-cycle-rebound.png'>图示</a>）"]
         AF -->|恒定| AG
-        AI --> MOVE_END
+        AI --> AQ
 
-        MOVE_END --> AQ{"以此决策路径是否找到规律？"}
+        AQ{"以此决策路径是否找到规律？"}
         AQ -->|能| AK["发现规律"]
         AQ -->|不能| AR{"是否已经把所有平移决策系统路径试过了？"}
         AR -->|否，未全部试过| AE
