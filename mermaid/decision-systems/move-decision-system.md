@@ -4,12 +4,8 @@ graph TD
         direction TB
         MOVE_PAD[" "]
         MOVE_PAD ~~~ AE["考虑平移方向"]
-        AE -->|直线（上下左右斜对角）| AA["看横行、竖行的黑块数量"]
-        AE -->|绕圈（顺/逆时针）| AF["考虑平移距离（步数）"]
-        AA -->|横行黑块数量相同| AB["可能是左右走的规律"]
-        AA -->|竖行黑块数量相同| AC["可能是上下走的规律"]
-        AB --> AF
-        AC --> AF
+        AE -->|直线（上下左右斜对角）| AF["考虑平移距离（步数）"]
+        AE -->|绕圈（顺/逆时针）| AF
 
         AG -->|循环走| MOVE_END["占位"]
         AG -->|反弹走| MOVE_END
@@ -27,4 +23,13 @@ graph TD
 
     style MOVE fill:#f7f7ff,stroke:#6c63ff,stroke-width:2px
     style MOVE_PAD fill:transparent,stroke:transparent,color:transparent
+
+    subgraph LINEAR[" "]
+        direction TB
+        LINEAR_ENTRY["看横行、竖行的黑块数量"]
+        LINEAR_ENTRY -->|横行黑块数量相同| AB["可能是左右走的规律"]
+        LINEAR_ENTRY -->|竖行黑块数量相同| AC["可能是上下走的规律"]
+    end
+
+    style LINEAR fill:#f7f7ff,stroke:#6c63ff,stroke-width:2px
 ```
