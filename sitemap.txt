@@ -1,3 +1,4 @@
+https://qortired.github.io/CS-Study/problem-solving-approach-for-analogical-relationships/
 https://qortired.github.io/CS-Study/%E8%B5%84%E6%96%99%E5%88%86%E6%9E%90/%E8%AE%A1%E7%AE%97%E7%AE%80%E5%8C%96/data-analysis-memorization/
 https://qortired.github.io/CS-Study/%E8%B5%84%E6%96%99%E5%88%86%E6%9E%90/%E8%AE%A1%E7%AE%97%E7%AE%80%E5%8C%96/data-analysis-simplified-calculations-mixed-growth-rate/
 https://qortired.github.io/CS-Study/mermaid/
@@ -26,8 +27,8 @@ https://qortired.github.io/CS-Study/new-discovery-directly-performing-subtractio
 https://qortired.github.io/CS-Study/discover-10-of-the-tips-from-doing-exercises/
 https://qortired.github.io/CS-Study/cs-exam-preparation-preface1/
 https://qortired.github.io/CS-Study/data-analysis-study-review-2607121945/
-https://qortired.github.io/en/categories/index.html
 https://qortired.github.io/en/tags/index.html
+https://qortired.github.io/en/categories/index.html
 https://qortired.github.io/tags/index.html
 https://qortired.github.io/categories/index.html
 https://qortired.github.io/
