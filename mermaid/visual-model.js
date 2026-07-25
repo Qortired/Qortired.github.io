@@ -49,6 +49,7 @@ function parseVisualGraph(code) {
   const groups = [];
   const subsystemRecords = [];
   const layoutRecords = [];
+  const layoutEdgeRecords = [];
   const nextParsedId = prefix => {
     let number = 1;
     while (model.nodes.some(node => node.id === `${prefix}${number}`) || model.edges.some(edge => edge.id === `${prefix}${number}`) || model.groups.some(group => group.id === `${prefix}${number}`)) number += 1;
@@ -89,6 +90,7 @@ function parseVisualGraph(code) {
       try {
         const parsed = JSON.parse(decodeURIComponent(layoutMeta[1]));
         if (parsed?.version === 1 && Array.isArray(parsed.nodes)) layoutRecords.push(...parsed.nodes);
+        if (parsed?.version === 1 && Array.isArray(parsed.edges)) layoutEdgeRecords.push(...parsed.edges);
       } catch {
         // Ignore malformed layout metadata so older or hand-edited Mermaid remains usable.
       }
@@ -136,6 +138,14 @@ function parseVisualGraph(code) {
       node.x = Number(saved.x);
       node.y = Number(saved.y);
       node.layoutLocked = Boolean(saved.layoutLocked);
+    });
+    model.layoutMetadata = true;
+  }
+  if (layoutEdgeRecords.length) {
+    const offsets = new Map(layoutEdgeRecords.map(record => [String(record.id || ''), record]));
+    model.edges.forEach(edge => {
+      const saved = offsets.get(edge.id);
+      if (saved && Number.isFinite(Number(saved.parallelOffset))) edge.parallelOffset = Number(saved.parallelOffset);
     });
     model.layoutMetadata = true;
   }
@@ -200,9 +210,13 @@ function serializeVisualGraph(model, options = {}) {
     lines.push(`    %% mindtree-subsystem ${encodeURIComponent(JSON.stringify(record))}`);
   });
   if (model.layoutMetadata || model.nodes.some(node => node.layoutLocked)) {
+    const edgeLayouts = model.edges
+      .filter(edge => Number.isFinite(Number(edge.parallelOffset)))
+      .map(edge => ({ id: edge.id, parallelOffset: Number(edge.parallelOffset) }));
     const layout = {
       version: 1,
-      nodes: model.nodes.map(node => ({ id: node.id, x: Math.round(Number(node.x) || 0), y: Math.round(Number(node.y) || 0), layoutLocked: Boolean(node.layoutLocked) }))
+      nodes: model.nodes.map(node => ({ id: node.id, x: Math.round(Number(node.x) || 0), y: Math.round(Number(node.y) || 0), layoutLocked: Boolean(node.layoutLocked) })),
+      ...(edgeLayouts.length ? { edges: edgeLayouts } : {})
     };
     lines.push(`    %% mindtree-layout ${encodeURIComponent(JSON.stringify(layout))}`);
   }
@@ -215,6 +229,22 @@ function visualMeasure(node) {
   const widest = Math.max(...lines.map(line => [...line].reduce((sum, char) => sum + (char.charCodeAt(0) > 255 ? 16 : 9), 0)), 72);
   node.width = Math.max(node.type === 'diamond' ? 116 : 150, Math.min(node.type === 'diamond' ? 230 : 340, widest + 42));
   node.height = Math.max(node.type === 'diamond' ? node.width : 58, lines.length * 25 + 34);
+}
+
+function allocateVisualId(preferredId, fallbackPrefix, reservedIds) {
+  const preferred = String(preferredId || '').trim();
+  if (preferred && !reservedIds.has(preferred)) {
+    reservedIds.add(preferred);
+    return preferred;
+  }
+  let number = 1;
+  let candidate = `${fallbackPrefix}${number}`;
+  while (reservedIds.has(candidate)) {
+    number += 1;
+    candidate = `${fallbackPrefix}${number}`;
+  }
+  reservedIds.add(candidate);
+  return candidate;
 }
 
 function layoutVisualModel(model) {
@@ -315,6 +345,214 @@ function layoutVisualModel(model) {
   });
 }
 
+function initializeVisualLayout(model, options = {}) {
+  const preserveLocked = Boolean(options.preserveLocked);
+  const lockedPositions = preserveLocked
+    ? new Map(model.nodes.filter(node => node.layoutLocked).map(node => [node.id, { x: node.x, y: node.y }]))
+    : new Map();
+  if (!preserveLocked) model.nodes.forEach(node => { node.layoutLocked = false; });
+  model.edges.forEach(edge => { delete edge.parallelOffset; });
+  model.layoutMetadata = true;
+  model.nodes.forEach(visualMeasure);
+  if (!model.nodes.length) return;
+
+  const nodeById = new Map(model.nodes.map(node => [node.id, node]));
+  const incoming = new Map(model.nodes.map(node => [node.id, new Set()]));
+  const outgoing = new Map(model.nodes.map(node => [node.id, new Set()]));
+  const addDirectedEdge = (from, to) => {
+    if (from === to || !nodeById.has(from) || !nodeById.has(to)) return;
+    outgoing.get(from).add(to);
+    incoming.get(to).add(from);
+  };
+  model.edges.forEach(edge => {
+    if (edge.direction === 'invisible' || edge.direction === 'none') return;
+    if (edge.direction === 'reverse') addDirectedEdge(edge.target, edge.source);
+    else {
+      addDirectedEdge(edge.source, edge.target);
+      if (edge.direction === 'both') addDirectedEdge(edge.target, edge.source);
+    }
+  });
+
+  const ranks = new Map(model.nodes.map(node => [node.id, 0]));
+  const remainingIncoming = new Map(model.nodes.map(node => [node.id, incoming.get(node.id).size]));
+  const queue = model.nodes.filter(node => remainingIncoming.get(node.id) === 0).map(node => node.id).sort();
+  const processed = new Set();
+  while (processed.size < model.nodes.length) {
+    if (!queue.length) {
+      const cycleNode = model.nodes.filter(node => !processed.has(node.id)).sort((a, b) => {
+        const incomingA = [...incoming.get(a.id)].filter(id => !processed.has(id)).length;
+        const incomingB = [...incoming.get(b.id)].filter(id => !processed.has(id)).length;
+        return incomingA - incomingB || a.id.localeCompare(b.id);
+      })[0];
+      if (!cycleNode) break;
+      queue.push(cycleNode.id);
+    }
+    const id = queue.shift();
+    if (processed.has(id)) continue;
+    processed.add(id);
+    outgoing.get(id).forEach(target => {
+      if (processed.has(target)) return;
+      ranks.set(target, Math.max(ranks.get(target) || 0, (ranks.get(id) || 0) + 1));
+      remainingIncoming.set(target, Math.max(0, remainingIncoming.get(target) - 1));
+      if (remainingIncoming.get(target) === 0) queue.push(target);
+    });
+  }
+
+  const layers = new Map();
+  model.nodes.forEach(node => {
+    const rank = ranks.get(node.id) || 0;
+    if (!layers.has(rank)) layers.set(rank, []);
+    layers.get(rank).push(node);
+  });
+  const orderedLayers = [...layers.entries()].sort((a, b) => a[0] - b[0]).map(([, nodes]) => nodes.sort((a, b) => a.id.localeCompare(b.id)));
+  const order = new Map();
+  const updateOrder = layer => layer.forEach((node, index) => order.set(node.id, index));
+  orderedLayers.forEach(updateOrder);
+  const reorderLayer = (layer, direction) => {
+    const decorated = layer.map((node, index) => {
+      const neighbors = [...(direction === 'up' ? incoming.get(node.id) : outgoing.get(node.id))]
+        .filter(id => (direction === 'up' ? ranks.get(id) < ranks.get(node.id) : ranks.get(id) > ranks.get(node.id)))
+        .map(id => order.get(id))
+        .filter(value => Number.isFinite(value));
+      return { node, index, center: neighbors.length ? neighbors.reduce((sum, value) => sum + value, 0) / neighbors.length : null };
+    });
+    decorated.sort((a, b) => {
+      if (a.center === null && b.center !== null) return 1;
+      if (a.center !== null && b.center === null) return -1;
+      if (a.center !== null && b.center !== null && a.center !== b.center) return a.center - b.center;
+      return a.index - b.index;
+    });
+    layer.splice(0, layer.length, ...decorated.map(item => item.node));
+    updateOrder(layer);
+  };
+  for (let pass = 0; pass < 4; pass += 1) {
+    orderedLayers.forEach(layer => reorderLayer(layer, 'up'));
+    [...orderedLayers].reverse().forEach(layer => reorderLayer(layer, 'down'));
+  }
+
+  const horizontalGap = 124;
+  const verticalGap = 96;
+  const canvasWidth = Math.max(1800, Math.min(2600, 900 + model.nodes.length * 70));
+  let y = 72;
+  orderedLayers.forEach(layer => {
+    const rowHeight = Math.max(...layer.map(node => node.height));
+    const rowWidth = layer.reduce((sum, node) => sum + node.width, 0) + horizontalGap * Math.max(0, layer.length - 1);
+    let x = Math.max(80, (canvasWidth - rowWidth) / 2);
+    const centerY = y + rowHeight / 2;
+    layer.forEach(node => {
+      node.x = x + node.width / 2;
+      node.y = centerY;
+      x += node.width + horizontalGap;
+    });
+    y += rowHeight + verticalGap;
+  });
+  lockedPositions.forEach((position, id) => {
+    const node = model.nodes.find(item => item.id === id);
+    if (node) { node.x = position.x; node.y = position.y; node.layoutLocked = true; }
+  });
+  separateSubsystemGroups(model, { preserveLocked });
+  if (!preserveLocked) alignVisualLayoutToCanvasOrigin(model);
+}
+
+function alignVisualLayoutToCanvasOrigin(model) {
+  if (!model.nodes.length) return;
+  const groupTops = model.groups.map(group => groupBounds(model, group)).filter(Boolean);
+  const left = Math.min(
+    ...model.nodes.map(node => node.x - node.width / 2),
+    ...groupTops.map(bounds => bounds.left)
+  );
+  const top = Math.min(
+    ...model.nodes.map(node => node.y - node.height / 2),
+    ...groupTops.map(bounds => bounds.top)
+  );
+  const offsetX = 72 - left;
+  const offsetY = 54 - top;
+  model.nodes.forEach(node => {
+    node.x += offsetX;
+    node.y += offsetY;
+  });
+}
+
+function translateGroupNodes(model, group, deltaX, deltaY, { preserveLocked = false } = {}) {
+  const memberIds = new Set(group.nodeIds || []);
+  model.nodes.filter(node => memberIds.has(node.id) && !(preserveLocked && node.layoutLocked)).forEach(node => {
+    node.x += deltaX;
+    node.y += deltaY;
+  });
+}
+
+function separateSubsystemGroups(model, { preserveLocked = false } = {}) {
+  // Subsystems are rendered as large containers. A node-by-node layout can
+  // place two containers over one another even when their own nodes do not
+  // collide. Candidate placements are scored for total area and aspect ratio,
+  // so the result uses available width without becoming excessively wide.
+  const gutter = 180;
+  const groups = model.groups
+    .filter(group => Array.isArray(group.nodeIds) && group.nodeIds.length)
+    .map(group => ({ group, bounds: groupBounds(model, group) }))
+    .filter(item => item.bounds)
+    .sort((a, b) => a.bounds.top - b.bounds.top || a.bounds.left - b.bounds.left || a.group.id.localeCompare(b.group.id));
+  const groupedNodeIds = new Set(groups.flatMap(item => item.group.nodeIds || []));
+  const outsideNodes = model.nodes
+    .filter(node => !groupedNodeIds.has(node.id))
+    .map(node => ({
+      left: node.x - node.width / 2,
+      top: node.y - node.height / 2,
+      right: node.x + node.width / 2,
+      bottom: node.y + node.height / 2
+    }));
+  const placed = [];
+  groups.forEach(item => {
+    const obstacles = [
+      ...placed.map(previous => previous.bounds),
+      ...outsideNodes
+    ];
+    const candidateRect = candidate => ({
+      left: item.bounds.left + candidate.x,
+      top: item.bounds.top + candidate.y,
+      right: item.bounds.left + item.bounds.width + candidate.x,
+      bottom: item.bounds.top + item.bounds.height + candidate.y
+    });
+    const collides = (rect, obstacle) => rect.left < obstacle.right + gutter && rect.right > obstacle.left - gutter && rect.top < obstacle.bottom + gutter && rect.bottom > obstacle.top - gutter;
+    const candidates = [{ x: 0, y: 0 }];
+    const clearCandidates = [];
+    const seen = new Set();
+    for (let index = 0; index < candidates.length && index < 96; index += 1) {
+      const candidate = candidates[index];
+      const key = `${Math.round(candidate.x)}:${Math.round(candidate.y)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const rect = candidateRect(candidate);
+      const overlaps = obstacles.filter(obstacle => collides(rect, obstacle));
+      if (!overlaps.length) { clearCandidates.push(candidate); continue; }
+      overlaps.slice(0, 3).forEach(obstacle => {
+        candidates.push({ x: obstacle.right + gutter - item.bounds.left, y: candidate.y });
+        candidates.push({ x: candidate.x, y: obstacle.bottom + gutter - item.bounds.top });
+      });
+    }
+    const available = clearCandidates.length ? clearCandidates : [{ x: 0, y: 0 }];
+    const fixedBounds = [...outsideNodes, ...placed.map(previous => previous.bounds)];
+    const best = available.sort((a, b) => {
+      const score = candidate => {
+        const rect = candidateRect(candidate);
+        const extent = [...fixedBounds, rect];
+        const left = Math.min(...extent.map(box => box.left));
+        const right = Math.max(...extent.map(box => box.right));
+        const top = Math.min(...extent.map(box => box.top));
+        const bottom = Math.max(...extent.map(box => box.bottom));
+        const width = right - left;
+        const height = bottom - top;
+        const aspectPenalty = Math.pow(Math.max(width, height) / Math.max(1, Math.min(width, height)) - 1, 2);
+        return width * height * (1 + aspectPenalty * .18) + (Math.abs(candidate.x) + Math.abs(candidate.y)) * 160;
+      };
+      return score(a) - score(b);
+    })[0];
+    if (best.x || best.y) translateGroupNodes(model, item.group, best.x, best.y, { preserveLocked });
+    const shiftedBounds = groupBounds(model, item.group);
+    placed.push({ bounds: { ...shiftedBounds, right: shiftedBounds.left + shiftedBounds.width, bottom: shiftedBounds.top + shiftedBounds.height } });
+  });
+}
+
 function nodeBoundary(node, toward) {
   const dx = toward.x - node.x;
   const dy = toward.y - node.y;
@@ -337,5 +575,5 @@ function groupBounds(model, group) {
   return { left, top, width: right - left, height: bottom - top };
 }
 
-window.MindTreeVisualModel = { VISUAL_IMAGE_MARKER, escHtml, escAttr, stripHtml, parseVisualLabel, readVisualNodeToken, parseVisualGraph, mermaidLabel, visualTextLines, serializeVisualGraph, visualMeasure, layoutVisualModel, nodeBoundary, groupBounds };
+window.MindTreeVisualModel = { VISUAL_IMAGE_MARKER, escHtml, escAttr, stripHtml, parseVisualLabel, readVisualNodeToken, parseVisualGraph, mermaidLabel, visualTextLines, serializeVisualGraph, visualMeasure, allocateVisualId, layoutVisualModel, initializeVisualLayout, nodeBoundary, groupBounds };
 

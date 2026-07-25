@@ -1,6 +1,12 @@
 (() => {
       const fileInput = document.getElementById('fileInput');
       const openButton = document.getElementById('openButton');
+      const newProjectButton = document.getElementById('newProjectButton');
+      const copyProjectButton = document.getElementById('copyProjectButton');
+      const projectDialog = document.getElementById('projectDialog');
+      const projectDialogForm = document.getElementById('projectDialogForm');
+      const projectDialogTitle = document.getElementById('projectDialogTitle');
+      const projectNameInput = document.getElementById('projectNameInput');
       const editButton = document.getElementById('editButton');
       const visualButton = document.getElementById('visualButton');
       const saveButton = document.getElementById('saveButton');
@@ -13,6 +19,12 @@
       const workspace = document.getElementById('workspace');
       const editorPanel = document.getElementById('editorPanel');
       const codeInput = document.getElementById('codeInput');
+      const findBar = document.getElementById('findBar');
+      const findInput = document.getElementById('findInput');
+      const findCount = document.getElementById('findCount');
+      const findPreviousButton = document.getElementById('findPreviousButton');
+      const findNextButton = document.getElementById('findNextButton');
+      const closeFindButton = document.getElementById('closeFindButton');
       const diagramOutput = document.getElementById('diagramOutput');
       const diagramScroll = document.getElementById('diagramScroll');
       const zoomLabel = document.getElementById('zoomLabel');
@@ -32,19 +44,27 @@
       const visualError = document.getElementById('visualError');
       const inspectorBody = document.getElementById('inspectorBody');
       const visualSelectionType = document.getElementById('visualSelectionType');
+      const toggleInspectorButton = document.getElementById('toggleInspectorButton');
+      const visualFindBar = document.getElementById('visualFindBar');
+      const visualFindInput = document.getElementById('visualFindInput');
+      const visualFindCount = document.getElementById('visualFindCount');
+      const visualFindPreviousButton = document.getElementById('visualFindPreviousButton');
+      const visualFindNextButton = document.getElementById('visualFindNextButton');
+      const closeVisualFindButton = document.getElementById('closeVisualFindButton');
       const visualSelect = document.getElementById('visualSelect');
       const addRectButton = document.getElementById('addRectButton');
       const addDiamondButton = document.getElementById('addDiamondButton');
       const connectButton = document.getElementById('connectButton');
       const groupButton = document.getElementById('groupButton');
       const layoutButton = document.getElementById('layoutButton');
+      const initialLayoutButton = document.getElementById('initialLayoutButton');
       const undoButton = document.getElementById('undoButton');
       const redoButton = document.getElementById('redoButton');
       const closeVisualButton = document.getElementById('closeVisualButton');
 
       const isWebReadingRuntime = !window.electronAPI;
       if (isWebReadingRuntime) {
-        [editButton, visualButton, saveButton, saveAsButton].forEach(button => {
+        [newProjectButton, copyProjectButton, editButton, visualButton, saveButton, saveAsButton].forEach(button => {
           if (button) button.hidden = true;
         });
         modeBadge.textContent = '阅读模式';
@@ -52,10 +72,14 @@
       }
 
       let editing = false;
+      let findMatches = [];
+      let findMatchIndex = -1;
       let currentFileName = 'diagram.mmd';
       let sourceText = '';
       let sourceFilePath = '';
       let sourceDirectoryUrl = '';
+      let projectRoot = '';
+      let legacyProject = false;
       let isDirty = false;
       let zoom = 1;
       let baseSvgWidth = 0;
@@ -78,6 +102,9 @@
       let visualModel = { direction: 'TB', nodes: [], edges: [], groups: [] };
       let visualZoom = 1;
       let visualSelection = null;
+      let visualInspectorVisible = true;
+      let visualFindMatches = [];
+      let visualFindMatchIndex = -1;
       let visualHistory = [];
       let visualFuture = [];
       let visualDrag = null;
@@ -106,7 +133,9 @@
         visualTextLines,
         serializeVisualGraph,
         visualMeasure,
+        allocateVisualId,
         layoutVisualModel,
+        initializeVisualLayout,
         nodeBoundary,
         groupBounds
       } = window.MindTreeVisualModel;
@@ -120,7 +149,42 @@
         return `${prefix}${number}`;
       };
 
+      function relayoutVisualAfterStructuralChange() {
+        if (visualModel.layoutMetadata) initializeVisualLayout(visualModel, { preserveLocked: true });
+        else layoutVisualModel(visualModel);
+      }
+
       const visualClipboardType = 'mindtree-visual-nodes';
+      const PARALLEL_EDGE_SPACING = 120;
+
+      function visualEdgePairKey(edge) {
+        return [edge.source, edge.target].sort().join('\u0000');
+      }
+
+      function visualEdgeParallelGroup(edge) {
+        return visualModel.edges.filter(item => visualEdgePairKey(item) === visualEdgePairKey(edge));
+      }
+
+      function visualEdgeDefaultOffset(edge) {
+        const ordered = [...visualEdgeParallelGroup(edge)].sort((a, b) => a.id.localeCompare(b.id));
+        const index = ordered.findIndex(item => item.id === edge.id);
+        return index < 0 ? 0 : (index - (ordered.length - 1) / 2) * PARALLEL_EDGE_SPACING;
+      }
+
+      function visualEdgeRouteOffset(edge) {
+        return Number.isFinite(Number(edge.parallelOffset)) ? Number(edge.parallelOffset) : visualEdgeDefaultOffset(edge);
+      }
+
+      function visualEdgeNormal(edge) {
+        const from = visualNode(edge.source);
+        const to = visualNode(edge.target);
+        if (!from || !to) return { x: 0, y: 0 };
+        const pair = [from, to].sort((a, b) => a.id.localeCompare(b.id));
+        const dx = pair[1].x - pair[0].x;
+        const dy = pair[1].y - pair[0].y;
+        const length = Math.hypot(dx, dy) || 1;
+        return { x: -dy / length, y: dx / length };
+      }
 
       async function writeVisualClipboard(payload) {
         const text = JSON.stringify(payload);
@@ -309,12 +373,30 @@
           groupEl.append(title);
           edgeLayer.append(groupEl);
         });
+        const parallelEdges = new Map();
+        visualModel.edges.forEach(edge => {
+          if (!visualNode(edge.source) || !visualNode(edge.target) || edge.source === edge.target) return;
+          const key = [edge.source, edge.target].sort().join('\u0000');
+          if (!parallelEdges.has(key)) parallelEdges.set(key, []);
+          parallelEdges.get(key).push(edge);
+        });
+        const edgeRouteOffsets = new Map();
+        parallelEdges.forEach(edges => {
+          const ordered = [...edges].sort((a, b) => a.id.localeCompare(b.id));
+          ordered.forEach((edge, index) => {
+            edgeRouteOffsets.set(edge.id, (index - (ordered.length - 1) / 2) * PARALLEL_EDGE_SPACING);
+          });
+        });
         const drawEdge = edge => {
           const from = visualNode(edge.source);
           const to = visualNode(edge.target);
           if (!from || !to) return;
-          const start = nodeBoundary(from, to);
-          const end = nodeBoundary(to, from);
+          const routeOffset = Number.isFinite(Number(edge.parallelOffset)) ? Number(edge.parallelOffset) : (edgeRouteOffsets.get(edge.id) || 0);
+          const normal = visualEdgeNormal(edge);
+          const shiftedFrom = { x: from.x + normal.x * routeOffset, y: from.y + normal.y * routeOffset };
+          const shiftedTo = { x: to.x + normal.x * routeOffset, y: to.y + normal.y * routeOffset };
+          const start = nodeBoundary(from, shiftedTo);
+          const end = nodeBoundary(to, shiftedFrom);
           const edgeEl = createSvgElement('g', { class: `visual-edge${visualSelection?.kind === 'edge' && visualSelection.id === edge.id ? ' selected' : ''}`, 'data-edge-id': edge.id });
           const pathData = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
           edgeEl.append(createSvgElement('path', { class: 'visual-edge-hit', d: pathData, fill: 'none', stroke: '#000', 'stroke-opacity': '0', 'stroke-width': '10', 'pointer-events': 'stroke' }));
@@ -423,6 +505,41 @@
         return mapped;
       }
 
+      function subsystemRestoreExternalMappings(externalEdges, record, childModel, boundary, linkId) {
+        const childIds = new Set(childModel.nodes.map(node => node.id));
+        const recordedIds = new Set((record?.nodes || []).map(node => node.id));
+        return externalEdges.map(edge => {
+          // Preserve the edge that is actually attached to the current link
+          // node. Its snapshot counterpart only identifies which child node
+          // it originally reached before the group was collapsed.
+          const recordedEdge = record?.externalEdges?.find(item => item.id === edge.id) || null;
+          const endpointEdge = recordedEdge || edge;
+          const sourceIsChild = recordedEdge
+            ? recordedIds.has(endpointEdge.source) || childIds.has(endpointEdge.source)
+            : endpointEdge.source === linkId
+              ? true
+              : endpointEdge.target === linkId
+                ? false
+                : childIds.has(endpointEdge.source);
+          const targetIsChild = recordedEdge
+            ? recordedIds.has(endpointEdge.target) || childIds.has(endpointEdge.target)
+            : endpointEdge.target === linkId
+              ? true
+              : endpointEdge.source === linkId
+                ? false
+                : childIds.has(endpointEdge.target);
+          let childSide = sourceIsChild && !targetIsChild ? 'source' : targetIsChild && !sourceIsChild ? 'target' : '';
+          if (!childSide) childSide = edge.source === linkId ? 'source' : edge.target === linkId ? 'target' : '';
+          const role = childSide === 'source'
+            ? edge.direction === 'reverse' ? 'entry' : 'exit'
+            : edge.direction === 'reverse' ? 'exit' : 'entry';
+          const originalNodeId = childSide === 'source' ? endpointEdge.source : childSide === 'target' ? endpointEdge.target : '';
+          const candidates = role === 'entry' ? boundary.entries : boundary.exits;
+          const defaultNodeId = childIds.has(originalNodeId) ? originalNodeId : candidates.length === 1 ? candidates[0].id : '';
+          return { edgeId: edge.id, role, childSide, nodeId: defaultNodeId };
+        });
+      }
+
       function restoreNodeLabel(node) {
         return visualTextLines(node).join(' / ') || node.id;
       }
@@ -442,45 +559,58 @@
         if (!sourceFilePath || !window.electronAPI?.resolveLocalResource || !window.electronAPI?.readSourceFile) {
           throw new Error('复原子系统需要在 Electron 桌面端打开本地主文件。');
         }
-        const resource = await window.electronAPI.resolveLocalResource(sourceFilePath, node.href);
-        if (!resource?.filePath) throw new Error(`找不到子系统文件：${node.href}`);
-        const source = await window.electronAPI.readSourceFile(resource.filePath);
-        const code = extractMermaid(source.content);
-        if (!code) throw new Error('子系统文件中没有找到 Mermaid 图代码。');
-        const childModel = parseVisualGraph(code);
-        if (!childModel.nodes.length) throw new Error('子系统文件没有可复原的格子。');
-        for (const childNode of childModel.nodes) await rebaseRestoredNode(childNode, resource.filePath);
-
         const record = node.subsystemRestore?.version === 1 ? node.subsystemRestore : null;
+        const resource = await window.electronAPI.resolveLocalResource(sourceFilePath, node.href);
+        let childModel;
+        let fileName = node.href;
+        let filePath = '';
+        if (resource?.filePath) {
+          const source = await window.electronAPI.readSourceFile(resource.filePath);
+          const code = extractMermaid(source.content);
+          if (!code) throw new Error('子系统文件中没有找到 Mermaid 图代码。');
+          childModel = parseVisualGraph(code);
+          if (!childModel.nodes.length) throw new Error('子系统文件没有可复原的格子。');
+          fileName = resource.fileName || node.href;
+          filePath = resource.filePath;
+          for (const childNode of childModel.nodes) await rebaseRestoredNode(childNode, resource.filePath);
+        } else if (record?.nodes?.length) {
+          // The link snapshot is enough to restore a subsystem even when an
+          // older linked Markdown file has already gone missing. Keep the
+          // selected link's identity; do not substitute another file.
+          childModel = {
+            direction: 'TB',
+            nodes: record.nodes.map(item => ({ ...item })),
+            edges: (record.internalEdges || []).map(item => ({ ...item })),
+            groups: []
+          };
+          setVisualStatus(`未找到 ${node.href}，将使用该超链接保存的子系统快照恢复。`);
+        } else {
+          throw new Error(`找不到子系统文件：${node.href}`);
+        }
         const boundary = subsystemBoundaryCandidates(childModel);
-        const externalEdges = record?.externalEdges?.length
-          ? record.externalEdges.map(edge => ({ ...edge }))
-          : visualModel.edges.filter(edge => edge.source === node.id || edge.target === node.id).map(edge => ({ ...edge }));
-        const mappings = externalEdges.map(edge => ({
-          edgeId: edge.id,
-          role: edge.direction === 'reverse'
-            ? edge.source === node.id ? 'entry' : 'exit'
-            : edge.target === node.id ? 'entry' : 'exit',
-          nodeId: ''
-        }));
+        const externalEdges = visualModel.edges
+          .filter(edge => edge.source === node.id || edge.target === node.id)
+          .map(edge => ({ ...edge }));
+        if (!externalEdges.length && record?.externalEdges?.length) {
+          // Snapshot-only recovery: the parent model no longer contains a
+          // live link edge, so retain the saved external connection instead.
+          externalEdges.push(...record.externalEdges.map(edge => ({ ...edge })));
+        }
+        const mappings = subsystemRestoreExternalMappings(externalEdges, record, childModel, boundary, node.id);
         if (record) {
           const childIds = new Set(childModel.nodes.map(item => item.id));
-          record.nodes?.forEach(item => { if (!childIds.has(item.id)) throw new Error(`子系统文件缺少原格子：${item.id}`); });
           mappings.forEach(mapping => {
             const edge = externalEdges.find(item => item.id === mapping.edgeId);
-            const endpoint = [edge?.source, edge?.target].find(item => childIds.has(item));
-            if (endpoint) mapping.nodeId = endpoint;
-          });
-        } else {
-          mappings.forEach(mapping => {
             const candidates = mapping.role === 'entry' ? boundary.entries : boundary.exits;
-            if (candidates.length === 1) mapping.nodeId = candidates[0].id;
+            const endpoint = mapping.childSide === 'source' ? edge?.source : edge?.target;
+            if (!mapping.nodeId && childIds.has(endpoint)) mapping.nodeId = endpoint;
+            if (!mapping.nodeId && candidates.length === 1) mapping.nodeId = candidates[0].id;
           });
         }
         visualRestoreDraft = {
           nodeId: node.id,
-          fileName: resource.fileName || node.href,
-          filePath: resource.filePath,
+          fileName,
+          filePath,
           node,
           childModel,
           record,
@@ -503,6 +633,38 @@
         return mapped;
       }
 
+      function subsystemSnapshotContent(record, fallbackModel, preferLinkedFile = false) {
+        // When a linked child file exists, it is the user's current saved
+        // version. Keep that exact version for undo instead of replacing it
+        // with the older snapshot embedded in the parent graph.
+        const source = preferLinkedFile && fallbackModel?.nodes?.length
+          ? { nodes: fallbackModel.nodes, edges: fallbackModel.edges }
+          : record?.nodes?.length
+            ? { nodes: record.nodes, edges: record.internalEdges || [] }
+            : { nodes: fallbackModel.nodes, edges: fallbackModel.edges };
+        const nodes = source.nodes.map(node => ({ ...node, groupId: '' }));
+        const edges = source.edges.map(edge => ({ ...edge }));
+        return serializeVisualGraph({ direction: 'TB', nodes, edges, groups: [] });
+      }
+
+      function restoreFileActions(model) {
+        return Array.isArray(model?.restoreFileActions) ? model.restoreFileActions : [];
+      }
+
+      async function restoreQueuedSubsystemFiles(actions) {
+        if (!actions.length || !window.electronAPI?.restoreSubsystemFile) return;
+        for (const action of actions) {
+          await window.electronAPI.restoreSubsystemFile(sourceFilePath, action.href, action.content);
+        }
+      }
+
+      async function queueSubsystemFilesForDeletion(actions) {
+        if (!actions.length || !window.electronAPI?.deleteSubsystemFile) return;
+        for (const action of actions) {
+          await window.electronAPI.deleteSubsystemFile(sourceFilePath, action.href);
+        }
+      }
+
       async function applyVisualSubsystemRestore() {
         const draft = visualRestoreDraft;
         if (!draft || draft.nodeId !== visualSelection?.ids?.[0]) return;
@@ -512,48 +674,71 @@
         }
         const before = visualState();
         try {
-          const existingIds = new Set(visualModel.nodes.filter(item => item.id !== draft.nodeId).map(item => item.id));
+          const reservedIds = new Set([
+            ...visualModel.nodes.filter(item => item.id !== draft.nodeId).map(item => item.id),
+            ...visualModel.edges.filter(edge => edge.source !== draft.nodeId && edge.target !== draft.nodeId).map(edge => edge.id),
+            ...visualModel.groups.map(group => group.id)
+          ]);
           const idMap = new Map();
-          draft.childModel.nodes.forEach(node => {
-            let id = node.id;
-            if (existingIds.has(id) || idMap.has(id)) id = nextVisualId(node.type === 'diamond' ? 'D' : 'N');
-            idMap.set(node.id, id); existingIds.add(id);
+          // The linked child Markdown is authoritative whenever it exists:
+          // it may have been edited and saved after the parent snapshot was
+          // captured. The embedded snapshot is only a recovery fallback for
+          // a missing child file.
+          const useLinkedFile = Boolean(draft.filePath);
+          const sourceNodes = useLinkedFile
+            ? draft.childModel.nodes.map(node => ({ ...node }))
+            : draft.record?.nodes?.length
+              ? draft.record.nodes.map(node => ({ ...node }))
+              : draft.childModel.nodes.map(node => ({ ...node }));
+          sourceNodes.forEach(node => {
+            const id = allocateVisualId(node.id, node.type === 'diamond' ? 'D' : 'N', reservedIds);
+            idMap.set(node.id, id);
           });
-          const groupId = draft.record?.groupId && !visualGroup(draft.record.groupId) ? draft.record.groupId : nextVisualId('G');
-          const restoredNodes = draft.childModel.nodes.map(node => {
-            const snapshot = draft.record?.nodes?.find(item => item.id === node.id);
+          const groupId = draft.record?.groupId && !reservedIds.has(draft.record.groupId)
+            ? allocateVisualId(draft.record.groupId, 'G', reservedIds)
+            : allocateVisualId('', 'G', reservedIds);
+          const restoredNodes = sourceNodes.map(node => {
+            const snapshot = useLinkedFile ? null : draft.record?.nodes?.find(item => item.id === node.id);
             const restored = { ...node, id: idMap.get(node.id), groupId };
             if (snapshot) Object.assign(restored, { x: snapshot.x, y: snapshot.y, width: snapshot.width, height: snapshot.height, layoutLocked: Boolean(snapshot.layoutLocked) });
             if (restored.subsystemRestore) restored.subsystemRestore = remapRestoredMetadata(restored.subsystemRestore, idMap, restored.id);
             return restored;
           });
-          const usedEdgeIds = new Set(visualModel.edges.filter(edge => edge.source !== draft.nodeId && edge.target !== draft.nodeId).map(edge => edge.id));
-          const makeEdgeId = edge => {
-            let id = edge.id;
-            if (usedEdgeIds.has(id)) id = nextVisualId('E');
-            usedEdgeIds.add(id); return id;
-          };
-          const restoredEdges = draft.childModel.edges.map(edge => ({ ...edge, id: makeEdgeId(edge), source: idMap.get(edge.source) || edge.source, target: idMap.get(edge.target) || edge.target }));
-          const externalEdges = draft.record?.externalEdges?.length
-            ? draft.record.externalEdges.map(edge => ({ ...edge, id: makeEdgeId(edge), source: idMap.get(edge.source) || edge.source, target: idMap.get(edge.target) || edge.target }))
-            : draft.externalEdges.map(edge => {
-              const mappingFor = role => draft.mappings.find(mapping => mapping.edgeId === edge.id && mapping.role === role)?.nodeId;
-              const entryId = idMap.get(mappingFor('entry')) || mappingFor('entry');
-              const exitId = idMap.get(mappingFor('exit')) || mappingFor('exit');
-              return { ...mapSubsystemExternalEdge(edge, draft.nodeId, entryId, exitId), id: makeEdgeId(edge) };
-            });
+          const sourceEdges = useLinkedFile
+            ? draft.childModel.edges.map(edge => ({ ...edge }))
+            : draft.record?.internalEdges?.length
+              ? draft.record.internalEdges.map(edge => ({ ...edge }))
+              : draft.childModel.edges.map(edge => ({ ...edge }));
+          const restoredEdges = sourceEdges.map(edge => ({ ...edge, id: allocateVisualId(edge.id, 'E', reservedIds), source: idMap.get(edge.source) || edge.source, target: idMap.get(edge.target) || edge.target }));
+          // `draft.externalEdges` is read from the open parent graph, so its
+          // IDs match the selections in the confirmation panel. The snapshot
+          // records only historical endpoints and must not replace these live
+          // arrows during the actual restore.
+          const externalEdges = draft.externalEdges.map(edge => {
+            const mapping = draft.mappings.find(item => item.edgeId === edge.id);
+            const mapped = { ...edge, id: allocateVisualId(edge.id, 'E', reservedIds) };
+            if (!mapping?.nodeId || !mapping.childSide) throw new Error('请为外部箭头选择有效的子系统格子。');
+            mapped[mapping.childSide] = idMap.get(mapping.nodeId) || mapping.nodeId;
+            return mapped;
+          });
           if (externalEdges.some(edge => !edge.source || !edge.target || edge.source === edge.target)) throw new Error('外部箭头复原后出现无效连接。');
 
           if (!window.electronAPI?.deleteSubsystemFile) throw new Error('当前程序不支持安全删除子系统文件，请重新打包后重试。');
-          await window.electronAPI.deleteSubsystemFile(sourceFilePath, draft.node.href);
+          if (draft.filePath) await window.electronAPI.deleteSubsystemFile(sourceFilePath, draft.node.href);
 
           visualModel.nodes = visualModel.nodes.filter(item => item.id !== draft.nodeId);
           visualModel.edges = visualModel.edges.filter(edge => edge.source !== draft.nodeId && edge.target !== draft.nodeId);
           visualModel.nodes.push(...restoredNodes);
           visualModel.edges.push(...restoredEdges, ...externalEdges);
           visualModel.groups.push({ id: groupId, title: draft.record?.title || draft.node.text || '复原子系统', nodeIds: restoredNodes.map(node => node.id), href: '', linkedFile: '', collapsed: false });
-          visualHistory.push(before); visualFuture = []; visualRestoreDraft = null; visualSelection = { kind: 'group', id: groupId }; markVisualDirty(); layoutVisualModel(visualModel); renderVisualModel();
-          setVisualStatus(`子分组已复原，子系统文件已删除：${draft.fileName}，请保存主图。`);
+          visualModel.restoreFileActions = [...restoreFileActions(visualModel), {
+            id: `restore-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            href: draft.node.href,
+            content: subsystemSnapshotContent(draft.record, draft.childModel, useLinkedFile)
+          }];
+          visualHistory.push(before); visualFuture = []; visualRestoreDraft = null; visualSelection = { kind: 'group', id: groupId }; markVisualDirty(); relayoutVisualAfterStructuralChange(); renderVisualModel();
+          const fileStatus = draft.filePath ? '源文件已暂存，退出查看器后才会删除' : '原链接文件不存在，未删除其他文件';
+          setVisualStatus(`子分组已复原：${restoredNodes.length} 个格子、${restoredEdges.length + externalEdges.length} 条箭头。${fileStatus}，请保存主图。`);
           setVisualError('');
         } catch (error) {
           setVisualError(`复原子系统失败：${error?.message || error}`);
@@ -570,12 +755,18 @@
 
       function restoreDraftMarkup(draft) {
         if (!draft) return '';
-        const choices = role => (role === 'entry' ? draft.boundary.entries : draft.boundary.exits);
+        const choices = (role, selectedId) => {
+          const boundaryNodes = role === 'entry' ? draft.boundary.entries : draft.boundary.exits;
+          const boundaryIds = new Set(boundaryNodes.map(node => node.id));
+          const allNodes = [...boundaryNodes, ...draft.childModel.nodes.filter(node => !boundaryIds.has(node.id))];
+          const selected = draft.childModel.nodes.find(node => node.id === selectedId);
+          return selected && !allNodes.some(node => node.id === selected.id) ? [selected, ...allNodes] : allNodes;
+        };
         const ambiguous = draft.mappings.some(mapping => !mapping.nodeId);
-        const mappingMarkup = draft.legacy && draft.externalEdges.length
-          ? `<p class="inspector-warning">旧链接没有保存原始外部箭头关系，请选择每条箭头对应的${ambiguous ? '入口或出口' : '格子'}。</p>${draft.mappings.map(mapping => {
+        const mappingMarkup = draft.externalEdges.length
+          ? `<p class="inspector-warning">请选择每条外部箭头连接到当前子系统中的入口或出口格子。${draft.legacy ? '旧链接没有保存原始对应关系。' : ''}</p>${draft.mappings.map(mapping => {
             const edge = draft.externalEdges.find(item => item.id === mapping.edgeId);
-            const options = choices(mapping.role);
+            const options = choices(mapping.role, mapping.nodeId);
             return `<label>箭头 ${escHtml(edge?.label || mapping.edgeId)}（${mapping.role === 'entry' ? '进入子系统' : '离开子系统'}）<select data-restore-edge="${escAttr(mapping.edgeId)}"><option value="">请选择</option>${options.map(node => `<option value="${escAttr(node.id)}" ${mapping.nodeId === node.id ? 'selected' : ''}>${escHtml(restoreNodeLabel(node))}</option>`).join('')}</select></label>`;
           }).join('')}` : `<p class="inspector-empty">将恢复子系统格子、箭头和分组，并删除 ${escHtml(draft.fileName)}。图片文件不会删除。</p>`;
         return `<div class="restore-confirm"><strong>确认复原子分组</strong>${mappingMarkup}<div class="inspector-actions"><button id="confirmRestoreSubsystemButton" type="button" ${ambiguous ? 'disabled' : ''}>确认复原并删除文件</button><button id="cancelRestoreSubsystemButton" type="button">取消</button></div></div>`;
@@ -721,7 +912,7 @@
           if (Object.prototype.hasOwnProperty.call(changes, 'href') && node.subsystemRestore && changes.href !== node.subsystemRestore.href) delete node.subsystemRestore;
         });
         visualModel.nodes.forEach(visualMeasure);
-        layoutVisualModel(visualModel);
+        relayoutVisualAfterStructuralChange();
         visualHistory.push(before); visualFuture = []; markVisualDirty(); renderVisualModel();
       }
 
@@ -736,7 +927,7 @@
         } else if (visualSelection?.kind === 'edge') {
           visualModel.edges = visualModel.edges.filter(edge => edge.id !== visualSelection.id);
         }
-        visualHistory.push(before); visualFuture = []; visualSelection = null; markVisualDirty(); layoutVisualModel(visualModel); renderVisualModel();
+        visualHistory.push(before); visualFuture = []; visualSelection = null; markVisualDirty(); relayoutVisualAfterStructuralChange(); renderVisualModel();
       }
 
       function makeVisualNode(type, x, y, groupId = '') {
@@ -754,7 +945,7 @@
         finishVisualTextEdit();
         const before = visualState();
         const node = makeVisualNode(type, 700, 100 + visualModel.nodes.length * 36);
-        visualModel.nodes.push(node); layoutVisualModel(visualModel); visualHistory.push(before); visualFuture = []; visualSelection = { kind: 'nodes', ids: [node.id] }; markVisualDirty(); renderVisualModel();
+        visualModel.nodes.push(node); relayoutVisualAfterStructuralChange(); visualHistory.push(before); visualFuture = []; visualSelection = { kind: 'nodes', ids: [node.id] }; markVisualDirty(); renderVisualModel();
       }
 
       function addVisualNodeAt(point, groupId = '') {
@@ -766,6 +957,27 @@
         if (group && !group.nodeIds.includes(node.id)) group.nodeIds.push(node.id);
         visualMeasure(node);
         visualHistory.push(before); visualFuture = []; visualSelection = { kind: 'nodes', ids: [node.id] }; markVisualDirty(); renderVisualModel(); focusNewVisualNodeText();
+      }
+
+      function addVisualSuccessorFromSelection() {
+        finishVisualTextEdit();
+        const source = visualNode(visualSelection?.kind === 'nodes' && visualSelection.ids.length === 1 ? visualSelection.ids[0] : '');
+        if (!source) return false;
+        const before = visualState();
+        const group = visualModel.groups.find(item => item.nodeIds.includes(source.id));
+        const groupId = source.groupId || group?.id || '';
+        const node = makeVisualNode('rect', source.x, source.y + source.height / 2 + 120, groupId);
+        // The new node is part of the automatic layout; only nodes the user
+        // has actually moved should remain fixed when the graph reflows.
+        node.layoutLocked = false;
+        visualModel.nodes.push(node);
+        if (group && !group.nodeIds.includes(node.id)) group.nodeIds.push(node.id);
+        visualModel.edges.push({ id: nextVisualId('E'), source: source.id, target: node.id, label: '', direction: 'forward' });
+        visualHistory.push(before); visualFuture = []; visualSelection = { kind: 'nodes', ids: [node.id] }; markVisualDirty();
+        relayoutVisualAfterStructuralChange();
+        renderVisualModel();
+        setVisualStatus('已添加后续格子并自动连接。');
+        return true;
       }
 
       function createVisualGroup() {
@@ -813,7 +1025,7 @@
           visualModel.edges = visualModel.edges.filter(edge => edge.source !== edge.target);
           visualModel.groups = visualModel.groups.filter(item => item.id !== group.id);
           visualModel.nodes.push(linkNode);
-          visualHistory.push(before); visualFuture = []; visualSelection = { kind: 'nodes', ids: [linkId] }; markVisualDirty(); layoutVisualModel(visualModel); renderVisualModel();
+          visualHistory.push(before); visualFuture = []; visualSelection = { kind: 'nodes', ids: [linkId] }; markVisualDirty(); relayoutVisualAfterStructuralChange(); renderVisualModel();
           setVisualStatus(`子系统文件已生成：${created.fileName || created.relativePath}`);
         } catch (error) {
           setVisualError(`生成子系统失败：${error?.message || error}`);
@@ -833,7 +1045,7 @@
           try {
             const imagePath = window.electronAPI.getPathForFile(file);
             const copied = await window.electronAPI.copyImageToSource(sourceFilePath, imagePath);
-            const before = visualState(); node.imagePath = copied.relativePath; node.imageLabel = node.imageLabel || '查看图片'; visualHistory.push(before); visualFuture = []; markVisualDirty(); layoutVisualModel(visualModel); renderVisualModel();
+            const before = visualState(); node.imagePath = copied.relativePath; node.imageLabel = node.imageLabel || '查看图片'; visualHistory.push(before); visualFuture = []; markVisualDirty(); relayoutVisualAfterStructuralChange(); renderVisualModel();
           } catch (error) {
             setVisualError(`插入图片失败：${error?.message || error}`);
           }
@@ -865,18 +1077,120 @@
         }
       }
 
-      function visualUndo() {
+      async function visualUndo() {
         finishVisualTextEdit();
         const previous = visualHistory.pop();
         if (!previous) return;
-        visualFuture.push(visualState()); visualModel = previous; visualSelection = null; markVisualDirty(); renderVisualModel();
+        const current = visualState();
+        const previousActionIds = new Set(restoreFileActions(previous).map(action => action.id));
+        const cancelledActions = restoreFileActions(current).filter(action => !previousActionIds.has(action.id));
+        try {
+          await restoreQueuedSubsystemFiles(cancelledActions);
+        } catch (error) {
+          visualHistory.push(previous);
+          setVisualError(`撤回子系统文件失败：${error?.message || error}`);
+          return;
+        }
+        visualFuture.push(current); visualModel = previous; visualSelection = null; markVisualDirty(); renderVisualModel();
+        if (cancelledActions.length) setVisualStatus('已撤回子系统复原，原链接文件已保留或按快照重建。');
       }
 
-      function visualRedo() {
+      async function visualRedo() {
         finishVisualTextEdit();
         const next = visualFuture.pop();
         if (!next) return;
-        visualHistory.push(visualState()); visualModel = next; visualSelection = null; markVisualDirty(); renderVisualModel();
+        const current = visualState();
+        const currentActionIds = new Set(restoreFileActions(current).map(action => action.id));
+        const queuedActions = restoreFileActions(next).filter(action => !currentActionIds.has(action.id));
+        try {
+          await queueSubsystemFilesForDeletion(queuedActions);
+        } catch (error) {
+          visualFuture.push(next);
+          setVisualError(`重做子系统文件失败：${error?.message || error}`);
+          return;
+        }
+        visualHistory.push(current); visualModel = next; visualSelection = null; markVisualDirty(); renderVisualModel();
+        if (queuedActions.length) setVisualStatus('已重做子系统复原，原链接文件将在退出查看器后删除。');
+      }
+
+      function setVisualInspectorVisible(visible) {
+        visualInspectorVisible = Boolean(visible);
+        visualInspector.hidden = !visualInspectorVisible;
+        workspace.classList.toggle('inspector-hidden', !visualInspectorVisible);
+        toggleInspectorButton.textContent = visualInspectorVisible ? '隐藏属性' : '显示属性';
+      }
+
+      function updateVisualFindMatches({ selectNearest = false } = {}) {
+        const query = visualFindInput.value.trim().toLocaleLowerCase();
+        visualFindMatches = [];
+        if (query) {
+          visualModel.nodes.forEach(node => {
+            if (String(node.text || '').toLocaleLowerCase().includes(query)) visualFindMatches.push({ kind: 'node', id: node.id });
+          });
+          visualModel.edges.forEach(edge => {
+            if (String(edge.label || '').toLocaleLowerCase().includes(query)) visualFindMatches.push({ kind: 'edge', id: edge.id });
+          });
+          visualModel.groups.forEach(group => {
+            if (String(group.title || '').toLocaleLowerCase().includes(query)) visualFindMatches.push({ kind: 'group', id: group.id });
+          });
+        }
+        if (!visualFindMatches.length) visualFindMatchIndex = -1;
+        else if (selectNearest || visualFindMatchIndex >= visualFindMatches.length) visualFindMatchIndex = 0;
+        visualFindCount.textContent = visualFindMatches.length ? `${visualFindMatchIndex + 1} / ${visualFindMatches.length}` : '0 / 0';
+        visualFindPreviousButton.disabled = !visualFindMatches.length;
+        visualFindNextButton.disabled = !visualFindMatches.length;
+      }
+
+      function visualFindMatchCenter(match) {
+        if (match.kind === 'node') {
+          const node = visualNode(match.id);
+          return node ? { x: node.x, y: node.y } : null;
+        }
+        if (match.kind === 'group') {
+          const bounds = groupBounds(visualModel, visualGroup(match.id));
+          return bounds ? { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 } : null;
+        }
+        const edge = visualEdge(match.id);
+        const from = edge && visualNode(edge.source);
+        const to = edge && visualNode(edge.target);
+        return from && to ? { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 } : null;
+      }
+
+      function revealVisualFindMatch(match) {
+        const center = visualFindMatchCenter(match);
+        if (!center) return;
+        const scrollToMatch = () => {
+          visualCanvasWrap.scrollLeft = Math.max(0, center.x * visualZoom - visualCanvasWrap.clientWidth / 2);
+          visualCanvasWrap.scrollTop = Math.max(0, center.y * visualZoom - visualCanvasWrap.clientHeight / 2);
+        };
+        scrollToMatch();
+        window.requestAnimationFrame(scrollToMatch);
+      }
+
+      function selectVisualFindMatch(step = 1) {
+        updateVisualFindMatches();
+        if (!visualFindMatches.length) return;
+        if (visualFindMatchIndex < 0) visualFindMatchIndex = 0;
+        else visualFindMatchIndex = (visualFindMatchIndex + step + visualFindMatches.length) % visualFindMatches.length;
+        const match = visualFindMatches[visualFindMatchIndex];
+        visualSelection = match.kind === 'node' ? { kind: 'nodes', ids: [match.id] } : { kind: match.kind, id: match.id };
+        renderVisualModel();
+        revealVisualFindMatch(match);
+        visualFindCount.textContent = `${visualFindMatchIndex + 1} / ${visualFindMatches.length}`;
+      }
+
+      function openVisualFindBar() {
+        if (!visualEditing) return;
+        visualFindBar.hidden = false;
+        visualFindInput.focus();
+        visualFindInput.select();
+        updateVisualFindMatches({ selectNearest: true });
+      }
+
+      function closeVisualFindBar() {
+        visualFindBar.hidden = true;
+        visualFindMatchIndex = -1;
+        visualFindMatches = [];
       }
 
       function openVisualEditor() {
@@ -892,7 +1206,7 @@
         visualOriginalCode = serializeVisualGraph(visualModel).trim();
         if (!visualModel.layoutMetadata) layoutVisualModel(visualModel);
         visualHistory = []; visualFuture = []; visualSelection = null; visualTextEditBefore = null; visualTextEditSelection = []; visualRestoreDraft = null; visualEditing = true;
-        editing = false; editorPanel.hidden = true; visualPanel.hidden = false; visualInspector.hidden = false; workspace.classList.remove('editing'); workspace.classList.add('visualizing');
+        editing = false; editorPanel.hidden = true; visualPanel.hidden = false; setVisualInspectorVisible(true); closeVisualFindBar(); workspace.classList.remove('editing'); workspace.classList.add('visualizing');
         modeBadge.textContent = '可视化编辑'; visualButton.textContent = '退出可视化'; setVisualError(''); setVisualStatus(''); renderVisualModel();
       }
 
@@ -905,7 +1219,7 @@
         else codeInput.value = visualOriginalSourceCode;
         visualRestoreDraft = null;
         visualConnectStart = ''; visualConnectPoint = null; visualConnectTarget = ''; visualDrag = null; visualEdgeEndpointDrag = null; visualEndpointTarget = '';
-        visualEditing = false; visualPanel.hidden = true; visualInspector.hidden = true; workspace.classList.remove('visualizing'); modeBadge.textContent = '阅读模式'; visualButton.textContent = '可视化编辑';
+        visualEditing = false; visualPanel.hidden = true; visualInspector.hidden = true; closeVisualFindBar(); workspace.classList.remove('visualizing', 'inspector-hidden'); modeBadge.textContent = '阅读模式'; visualButton.textContent = '可视化编辑';
         isDirty = visualWasDirty || changed;
         if (isDirty) setSaveStatus('未保存');
         renderDiagram(codeInput.value);
@@ -949,10 +1263,32 @@
       closeVisualButton.addEventListener('click', closeVisualEditor);
       visualSelect.addEventListener('click', () => { visualMode = 'select'; visualConnectStart = ''; visualConnectPoint = null; visualConnectTarget = ''; visualEdgeEndpointDrag = null; visualEndpointTarget = ''; updateVisualModeButtons(); renderVisualModel(); });
       connectButton.addEventListener('click', () => { visualMode = 'connect'; visualSelection = null; visualConnectStart = ''; visualConnectPoint = null; visualConnectTarget = ''; visualEdgeEndpointDrag = null; visualEndpointTarget = ''; updateVisualModeButtons(); renderVisualModel(); });
+      toggleInspectorButton.addEventListener('click', () => setVisualInspectorVisible(!visualInspectorVisible));
+      visualFindInput.addEventListener('input', () => updateVisualFindMatches({ selectNearest: true }));
+      visualFindInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          selectVisualFindMatch(event.shiftKey ? -1 : 0);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          closeVisualFindBar();
+        }
+      });
+      visualFindPreviousButton.addEventListener('click', () => selectVisualFindMatch(-1));
+      visualFindNextButton.addEventListener('click', () => selectVisualFindMatch(1));
+      closeVisualFindButton.addEventListener('click', closeVisualFindBar);
       addRectButton.addEventListener('click', () => addVisualNode('rect'));
       addDiamondButton.addEventListener('click', () => addVisualNode('diamond'));
       groupButton.addEventListener('click', createVisualGroup);
       layoutButton.addEventListener('click', () => { const before = visualState(); layoutVisualModel(visualModel); visualHistory.push(before); visualFuture = []; markVisualDirty(); renderVisualModel(); });
+      initialLayoutButton.addEventListener('click', () => {
+        finishVisualTextEdit();
+        const before = visualState();
+        initializeVisualLayout(visualModel);
+        visualHistory.push(before); visualFuture = []; markVisualDirty(); renderVisualModel();
+        setVisualStatus('已忽略手动布局，按图形结构重新初始化布局。');
+      });
       undoButton.addEventListener('click', visualUndo);
       redoButton.addEventListener('click', visualRedo);
 
@@ -1008,7 +1344,17 @@
           renderVisualModel();
           return;
         }
-        if (edgeEl) { visualSelection = { kind: 'edge', id: edgeEl.dataset.edgeId }; visualDrag = null; renderVisualModel(); return; }
+        if (edgeEl) {
+          const edge = visualEdge(edgeEl.dataset.edgeId);
+          visualSelection = edge ? { kind: 'edge', id: edge.id } : null;
+          if (edge && visualEdgeParallelGroup(edge).length > 1 && event.button === 0) {
+            visualDrag = { kind: 'edge-route', edgeId: edge.id, start: point, before: visualState(), startOffset: visualEdgeRouteOffset(edge), normal: visualEdgeNormal(edge), moved: false };
+          } else {
+            visualDrag = null;
+          }
+          renderVisualModel();
+          return;
+        }
         if (groupEl) {
           const group = visualGroup(groupEl.dataset.groupId);
           visualSelection = group ? { kind: 'group', id: group.id } : null;
@@ -1045,6 +1391,16 @@
           const dx = point.x - visualDrag.start.x; const dy = point.y - visualDrag.start.y;
           visualDrag.moved = visualDrag.moved || Boolean(dx || dy);
           visualDrag.positions.forEach((position, id) => { const node = visualNode(id); if (node) { node.x = position.x + dx; node.y = position.y + dy; } });
+        } else if (visualDrag.kind === 'edge-route') {
+          const edge = visualEdge(visualDrag.edgeId);
+          if (edge) {
+            const dx = point.x - visualDrag.start.x;
+            const dy = point.y - visualDrag.start.y;
+            const delta = dx * visualDrag.normal.x + dy * visualDrag.normal.y;
+            visualDrag.moved = visualDrag.moved || Boolean(dx || dy);
+            edge.parallelOffset = Math.max(-600, Math.min(600, visualDrag.startOffset + delta));
+            visualModel.layoutMetadata = true;
+          }
         } else { visualDrag.current = point; }
         renderVisualModel();
       });
@@ -1057,7 +1413,7 @@
           const edge = visualEdge(drag.edgeId);
           if (edge && targetId && targetId !== drag.fixedNodeId) {
             edge[drag.endpointRole] = targetId;
-            visualHistory.push(drag.before); visualFuture = []; markVisualDirty();
+            visualHistory.push(drag.before); visualFuture = []; markVisualDirty(); relayoutVisualAfterStructuralChange();
             setVisualStatus('箭头指向已修改，请保存主图。');
           }
           visualEdgeEndpointDrag = null; visualEndpointTarget = ''; renderVisualModel(); return;
@@ -1067,7 +1423,7 @@
           if (targetId && targetId !== visualConnectStart) {
             const before = visualState();
             visualModel.edges.push({ id: nextVisualId('E'), source: visualConnectStart, target: targetId, label: '', direction: 'forward' });
-            visualHistory.push(before); visualFuture = []; markVisualDirty();
+            visualHistory.push(before); visualFuture = []; markVisualDirty(); relayoutVisualAfterStructuralChange();
           }
           visualConnectStart = ''; visualConnectPoint = null; visualConnectTarget = ''; renderVisualModel(); return;
         }
@@ -1086,6 +1442,15 @@
             drag.positions.forEach((position, id) => { const node = visualNode(id); if (node) node.layoutLocked = true; });
             visualModel.layoutMetadata = true;
             visualHistory.push(drag.before); visualFuture = []; markVisualDirty();
+          }
+          visualDrag = null; renderVisualModel(); return;
+        }
+        if (visualDrag?.kind === 'edge-route') {
+          const drag = visualDrag;
+          const edge = visualEdge(drag.edgeId);
+          if (edge && drag.moved && Math.abs(Number(edge.parallelOffset) - drag.startOffset) > 0.5) {
+            visualHistory.push(drag.before); visualFuture = []; markVisualDirty();
+            setVisualStatus('箭头间距已调整，请保存主图。');
           }
           visualDrag = null; renderVisualModel(); return;
         }
@@ -1165,9 +1530,82 @@
         if (editing) codeInput.focus();
       });
 
+      function updateFindMatches({ selectNearest = false } = {}) {
+        const query = findInput.value;
+        const text = codeInput.value;
+        findMatches = [];
+        if (query) {
+          const needle = query.toLocaleLowerCase();
+          const haystack = text.toLocaleLowerCase();
+          let start = 0;
+          while (start <= haystack.length - needle.length) {
+            const match = haystack.indexOf(needle, start);
+            if (match < 0) break;
+            findMatches.push(match);
+            start = match + Math.max(needle.length, 1);
+          }
+        }
+        if (!findMatches.length) findMatchIndex = -1;
+        else if (selectNearest) {
+          const cursor = codeInput.selectionStart;
+          const nextIndex = findMatches.findIndex(match => match >= cursor);
+          findMatchIndex = nextIndex >= 0 ? nextIndex : 0;
+        } else if (findMatchIndex >= findMatches.length) findMatchIndex = 0;
+        findCount.textContent = findMatches.length ? `${findMatchIndex + 1} / ${findMatches.length}` : '0 / 0';
+        findPreviousButton.disabled = !findMatches.length;
+        findNextButton.disabled = !findMatches.length;
+      }
+
+      function selectFindMatch(step = 1) {
+        updateFindMatches();
+        if (!findMatches.length) return;
+        if (findMatchIndex < 0) {
+          const cursor = codeInput.selectionStart;
+          const nextIndex = findMatches.findIndex(match => match >= cursor);
+          findMatchIndex = nextIndex >= 0 ? nextIndex : 0;
+        } else {
+          findMatchIndex = (findMatchIndex + step + findMatches.length) % findMatches.length;
+        }
+        const start = findMatches[findMatchIndex];
+        codeInput.focus();
+        codeInput.setSelectionRange(start, start + findInput.value.length);
+        findCount.textContent = `${findMatchIndex + 1} / ${findMatches.length}`;
+      }
+
+      function openFindBar() {
+        if (!editing) return;
+        findBar.hidden = false;
+        findInput.focus();
+        findInput.select();
+        updateFindMatches({ selectNearest: true });
+      }
+
+      function closeFindBar() {
+        findBar.hidden = true;
+        findMatches = [];
+        findMatchIndex = -1;
+        codeInput.focus();
+      }
+
+      findInput.addEventListener('input', () => updateFindMatches({ selectNearest: true }));
+      findInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          selectFindMatch(event.shiftKey ? -1 : 0);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          closeFindBar();
+        }
+      });
+      findPreviousButton.addEventListener('click', () => selectFindMatch(-1));
+      findNextButton.addEventListener('click', () => selectFindMatch(1));
+      closeFindButton.addEventListener('click', closeFindBar);
+
       codeInput.addEventListener('input', () => {
         isDirty = true;
         setSaveStatus('未保存');
+        if (!findBar.hidden) updateFindMatches({ selectNearest: true });
         window.clearTimeout(renderTimer);
         renderTimer = window.setTimeout(() => renderDiagram(codeInput.value), 180);
       });
@@ -1180,6 +1618,8 @@
       }
       loadInitialSource();
 
+      newProjectButton.addEventListener('click', createProjectFromPrompt);
+      copyProjectButton.addEventListener('click', copyProjectFromPrompt);
       saveButton.addEventListener('click', saveSourceFile);
       saveAsButton.addEventListener('click', saveSourceFileAs);
       reloadFileButton.addEventListener('click', reloadChangedSourceFile);
@@ -1187,6 +1627,31 @@
         fileChangeNotice.hidden = true;
       });
       document.addEventListener('keydown', event => {
+        const targetIsTextField = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target?.isContentEditable;
+        if (visualEditing && !targetIsTextField && event.key === 'Tab' && addVisualSuccessorFromSelection()) {
+          event.preventDefault();
+          return;
+        }
+        if (visualEditing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+          event.preventDefault();
+          openVisualFindBar();
+          return;
+        }
+        if (visualEditing && event.key === 'Escape' && !visualFindBar.hidden) {
+          event.preventDefault();
+          closeVisualFindBar();
+          return;
+        }
+        if (editing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+          event.preventDefault();
+          openFindBar();
+          return;
+        }
+        if (editing && event.key === 'Escape' && !findBar.hidden) {
+          event.preventDefault();
+          closeFindBar();
+          return;
+        }
         const editingTextField = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target?.isContentEditable;
         if (visualEditing && !editingTextField && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') {
           event.preventDefault();
@@ -1319,6 +1784,115 @@
       };
       diagramScroll.addEventListener('pointerup', clearMobilePointer);
       diagramScroll.addEventListener('pointercancel', clearMobilePointer);
+
+      function escapeRegExp(value) {
+        return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }
+
+      function selectCodeLine(lineIndex) {
+        const lines = codeInput.value.split(/\r?\n/);
+        if (lineIndex < 0 || lineIndex >= lines.length) return false;
+        const offset = lines.slice(0, lineIndex).reduce((total, line) => total + line.length + 1, 0);
+        codeInput.focus();
+        codeInput.setSelectionRange(offset, offset + lines[lineIndex].length);
+        return true;
+      }
+
+      function mermaidNodeIdFromElement(element) {
+        const node = element?.closest?.('.node[id^="flowchart-"]');
+        if (!node) return '';
+        // Mermaid emits IDs such as flowchart-N15-42. Our generated node IDs
+        // are preserved before the final renderer-specific numeric suffix.
+        return String(node.id || '').replace(/^flowchart-/, '').replace(/-\d+$/, '');
+      }
+
+      function mermaidEdgeIdNearPointer(element, clientX, clientY, isCandidate = () => true) {
+        const svg = element?.closest?.('svg');
+        if (!svg) return '';
+        let closest = { id: '', distance: Infinity };
+        svg.querySelectorAll('path[id^="L_"]').forEach(path => {
+          if (!isCandidate(path.id)) return;
+          try {
+            const length = path.getTotalLength();
+            const matrix = path.getScreenCTM();
+            if (!length || !matrix) return;
+            for (let step = 0; step <= 16; step += 1) {
+              const point = path.getPointAtLength((length * step) / 16);
+              const x = point.x * matrix.a + point.y * matrix.c + matrix.e;
+              const y = point.x * matrix.b + point.y * matrix.d + matrix.f;
+              const distance = Math.hypot(x - clientX, y - clientY);
+              if (distance < closest.distance) closest = { id: path.id, distance };
+            }
+          } catch {
+            // Ignore non-geometric SVG paths.
+          }
+        });
+        return closest.distance <= 48 ? closest.id : '';
+      }
+
+      function normalizedMermaidLabel(value) {
+        return String(value || '').replace(/\s+/g, '').replace(/<br\s*\/?\s*>/gi, '').trim();
+      }
+
+      function edgeLabelTextFromElement(element) {
+        const label = element?.closest?.('.edgeLabel');
+        return label ? normalizedMermaidLabel(label.textContent) : '';
+      }
+
+      function edgeLineIndexesForLabel(lines, labelText) {
+        if (!labelText) return [];
+        return lines.reduce((indexes, line, index) => {
+          const match = /--[^|]*\|([\s\S]*?)\|/.exec(line);
+          if (match && normalizedMermaidLabel(match[1]) === labelText) indexes.push(index);
+          return indexes;
+        }, []);
+      }
+
+      function indexDiagramToCode(event) {
+        if (!editing || visualEditing || event.button !== 1) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target) return;
+        const lines = codeInput.value.split(/\r?\n/);
+        const nodeId = mermaidNodeIdFromElement(target);
+        const labelText = edgeLabelTextFromElement(target);
+        let lineIndex = -1;
+        if (labelText) {
+          const candidates = edgeLineIndexesForLabel(lines, labelText);
+          if (candidates.length === 1) {
+            lineIndex = candidates[0];
+          } else if (candidates.length > 1) {
+            const edgeId = mermaidEdgeIdNearPointer(target, event.clientX, event.clientY, id => {
+              const match = /^L_([^_]+)_([^_]+)(?:_.*)?$/.exec(id);
+              return Boolean(match && candidates.some(index => {
+                const line = lines[index];
+                return new RegExp(`\\b${escapeRegExp(match[1])}\\b`).test(line)
+                  && new RegExp(`\\b${escapeRegExp(match[2])}\\b`).test(line);
+              }));
+            });
+            const match = /^L_([^_]+)_([^_]+)(?:_.*)?$/.exec(edgeId);
+            if (match) lineIndex = candidates.find(index => new RegExp(`\\b${escapeRegExp(match[1])}\\b`).test(lines[index]) && new RegExp(`\\b${escapeRegExp(match[2])}\\b`).test(lines[index]));
+          }
+        } else if (nodeId) {
+          const nodePattern = new RegExp(`^\\s*${escapeRegExp(nodeId)}(?:\\s|[\\[\\(\\{])`);
+          lineIndex = lines.findIndex(line => nodePattern.test(line));
+        } else {
+          const edgeId = mermaidEdgeIdNearPointer(target, event.clientX, event.clientY);
+          const match = /^L_([^_]+)_([^_]+)(?:_.*)?$/.exec(edgeId);
+          if (match) {
+            const [, sourceId, targetId] = match;
+            lineIndex = lines.findIndex(line => /--/.test(line)
+              && new RegExp(`\\b${escapeRegExp(sourceId)}\\b`).test(line)
+              && new RegExp(`\\b${escapeRegExp(targetId)}\\b`).test(line));
+          }
+        }
+        if (lineIndex < 0 || !selectCodeLine(lineIndex)) return;
+        event.preventDefault();
+      }
+
+      diagramOutput.addEventListener('mousedown', event => {
+        if (editing && !visualEditing && event.button === 1) event.preventDefault();
+      });
+      diagramOutput.addEventListener('auxclick', indexDiagramToCode);
 
       diagramOutput.addEventListener('click', async event => {
         const target = event.target;
@@ -1477,6 +2051,8 @@
         sourceText = String(source.content || '');
         sourceFilePath = source.filePath || '';
         sourceDirectoryUrl = source.directoryUrl || '';
+        projectRoot = source.projectRoot || '';
+        legacyProject = Boolean(source.legacyProject);
         isDirty = false;
         mobileAutoFit = true;
         fileChangeNotice.hidden = true;
@@ -1484,9 +2060,16 @@
         fileName.textContent = currentFileName;
         brandSubtitle.textContent = currentFileName;
         document.body.classList.add('has-file');
-        saveButton.disabled = false;
-        saveAsButton.disabled = false;
-        setSaveStatus('已打开源文件');
+        saveButton.disabled = legacyProject;
+        saveAsButton.disabled = legacyProject;
+        copyProjectButton.disabled = legacyProject;
+        editButton.disabled = legacyProject;
+        visualButton.disabled = legacyProject;
+        setSaveStatus(legacyProject ? '请先初始化为独立项目后再编辑' : '已打开独立项目');
+        if (legacyProject) {
+          brandSubtitle.textContent = `${currentFileName}（旧文件：请初始化项目）`;
+          window.setTimeout(() => initializeLegacyProjectFromPrompt(), 0);
+        }
         const code = extractMermaid(sourceText);
         if (!code) {
           showError('没有找到 Mermaid 代码。请确认文件中包含 ```mermaid 代码块，或直接拖入 .mmd 文件。');
@@ -1573,7 +2156,7 @@
         const content = buildSavedContent();
         if (window.electronAPI?.saveSourceFileAs) {
           try {
-            const result = await window.electronAPI.saveSourceFileAs(currentFileName, content);
+            const result = await window.electronAPI.saveSourceFileAs(sourceFilePath, currentFileName, content);
             if (!result || result.canceled) return;
             sourceFilePath = result.filePath || '';
             currentFileName = result.fileName || currentFileName;
@@ -1595,6 +2178,68 @@
         isDirty = false;
         setSaveStatus('已下载副本');
         return true;
+      }
+
+      function askProjectName(title, initialName) {
+        return new Promise(resolve => {
+          projectDialogTitle.textContent = title;
+          projectNameInput.value = initialName;
+          const submit = event => {
+            event.preventDefault();
+            const confirmed = event.submitter?.value === 'confirm';
+            projectDialog.close();
+            projectDialogForm.removeEventListener('submit', submit);
+            projectDialog.removeEventListener('cancel', cancel);
+            resolve(confirmed ? projectNameInput.value.trim() : '');
+          };
+          const cancel = () => {
+            projectDialogForm.removeEventListener('submit', submit);
+            projectDialog.removeEventListener('cancel', cancel);
+            resolve('');
+          };
+          projectDialogForm.addEventListener('submit', submit);
+          projectDialog.addEventListener('cancel', cancel);
+          projectDialog.showModal();
+          projectNameInput.focus();
+          projectNameInput.select();
+        });
+      }
+
+      async function createProjectFromPrompt() {
+        const projectName = await askProjectName('新建项目', '我的脑图项目');
+        if (!projectName) return;
+        try {
+          const result = await window.electronAPI.createProject(projectName);
+          if (result?.source) loadSource(result.source);
+        } catch (error) {
+          showError(`新建项目失败：\n${error?.message || error}`);
+        }
+      }
+
+      async function copyProjectFromPrompt() {
+        if (!sourceFilePath || legacyProject) return;
+        const defaultName = `${projectRoot ? projectRoot.split(/[\\/]/).pop() : '脑图'} 备份`;
+        const projectName = await askProjectName('备份项目', defaultName);
+        if (!projectName) return;
+        try {
+          const result = await window.electronAPI.copyProject(sourceFilePath, projectName);
+          if (result?.source) loadSource(result.source);
+        } catch (error) {
+          showError(`创建项目副本失败：\n${error?.message || error}`);
+        }
+      }
+
+      async function initializeLegacyProjectFromPrompt() {
+        const projectName = await askProjectName('初始化独立项目', currentFileName.replace(/\.[^.]+$/, '') || '迁移脑图项目');
+        if (!projectName) return false;
+        try {
+          const result = await window.electronAPI.initializeLegacyProject(sourceFilePath, projectName);
+          if (result?.source) loadSource(result.source);
+          return Boolean(result?.source);
+        } catch (error) {
+          showError(`初始化独立项目失败：\n${error?.message || error}`);
+          return false;
+        }
       }
 
       async function handleCloseRequest() {
@@ -1688,7 +2333,7 @@
       async function openImageWindow(imageUrl, title) {
         if (window.electronAPI?.openImageWindow) {
           try {
-            await window.electronAPI.openImageWindow(imageUrl, title || '图片预览');
+            await window.electronAPI.openImageWindow(imageUrl, title || '图片预览', sourceFilePath);
           } catch (error) {
             showError(`打开图片失败：\n${error?.message || error}`);
           }

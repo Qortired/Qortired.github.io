@@ -40,6 +40,8 @@
       </div>
       <div class="toolbar">
         <span id="modeBadge" class="mode-badge">阅读模式</span>
+        <button id="newProjectButton" type="button">新建项目</button>
+        <button id="copyProjectButton" type="button" disabled>备份项目</button>
         <button id="openButton" class="primary" type="button">打开文件</button>
         <button id="editButton" type="button">编辑模式</button>
         <button id="visualButton" type="button">可视化编辑</button>
@@ -59,6 +61,13 @@
       <section id="workspace" class="workspace">
         <section id="editorPanel" class="panel" hidden>
           <div class="panel-head"><strong>Mermaid 代码</strong><span>输入后自动更新</span></div>
+          <div id="findBar" class="find-bar" role="search" aria-label="查找 Mermaid 代码" hidden>
+            <input id="findInput" type="search" placeholder="查找代码" autocomplete="off" aria-label="查找关键词">
+            <span id="findCount" class="find-count" aria-live="polite">0 / 0</span>
+            <button id="findPreviousButton" type="button" title="上一个匹配项">上一个</button>
+            <button id="findNextButton" type="button" title="下一个匹配项">下一个</button>
+            <button id="closeFindButton" type="button" title="关闭查找">关闭</button>
+          </div>
           <textarea id="codeInput" spellcheck="false" aria-label="Mermaid 代码编辑区"></textarea>
         </section>
 
@@ -72,15 +81,23 @@
             <button id="groupButton" type="button" disabled>创建分组</button>
             <span class="toolbar-separator"></span>
             <button id="layoutButton" type="button">自动布局</button>
+            <button id="initialLayoutButton" type="button">自动布局（初始化）</button>
             <button id="undoButton" type="button">撤销</button>
             <button id="redoButton" type="button">重做</button>
+            <button id="toggleInspectorButton" type="button">隐藏属性</button>
             <button id="closeVisualButton" type="button">返回阅读</button>
+          </div>
+          <div id="visualFindBar" class="visual-find-bar" role="search" aria-label="查找可视化内容" hidden>
+            <input id="visualFindInput" type="search" placeholder="查找格子、箭头或子系统" autocomplete="off" aria-label="查找可视化内容">
+            <span id="visualFindCount" class="find-count" aria-live="polite">0 / 0</span>
+            <button id="visualFindPreviousButton" type="button">上一个</button>
+            <button id="visualFindNextButton" type="button">下一个</button>
+            <button id="closeVisualFindButton" type="button">关闭</button>
           </div>
           <div id="visualStatus" class="visual-status" role="status" aria-live="polite" hidden></div>
           <div id="visualError" class="visual-error" hidden></div>
           <div class="visual-canvas-wrap">
             <svg id="visualCanvas" class="mode-select" viewBox="0 0 1400 900" role="application" aria-label="Mermaid 可视化编辑画布"></svg>
-            <div class="visual-hint">双击空白新建格子；拖动格子调整位置；选中箭头后拖动尖端修改指向；Ctrl+C 复制，Ctrl+V 粘贴到鼠标位置；右键从一个格子拖到另一个格子创建箭头</div>
           </div>
         </section>
 
@@ -117,6 +134,18 @@
         </section>
       </section>
     </main>
+
+    <dialog id="projectDialog" class="project-dialog">
+      <form id="projectDialogForm" method="dialog">
+        <h2 id="projectDialogTitle">新建项目</h2>
+        <label>项目名称<input id="projectNameInput" type="text" autocomplete="off" required></label>
+        <p>项目将创建在桌面 MindTree Projects 文件夹中。</p>
+        <div class="inspector-actions">
+          <button value="cancel" type="submit">取消</button>
+          <button id="projectDialogConfirm" value="confirm" type="submit" class="primary">确认</button>
+        </div>
+      </form>
+    </dialog>
   </div>
 
   <script src="visual-model.js"></script>
